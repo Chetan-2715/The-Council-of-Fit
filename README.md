@@ -20,24 +20,27 @@ Most fitness apps are passive trackers. They show you data (e.g., "You slept 5 h
 
 ## 2. 🧠 Agentic Architecture
 
-The system uses **CrewAI** to orchestrate a multi-agent workflow. We use a unique **"Simulated Debate" pattern** to maximize reasoning depth while minimizing API latency.
+The system uses **CrewAI** to orchestrate a multi-agent workflow. We use a **"Simulated Debate" pattern** to maximize reasoning depth while minimizing API latency.
 
-```mermaid
-graph TD
-    User((User Input)) -->|JSON: Sleep, Stress, Goals| Debate[Agent 1: Debate Moderator]
-    
-    subgraph "The Council (Gemini 1.5 Flash)"
-        Debate -->|Generates Script| Script[Drill Sergeant vs Zen Master]
-        Script -->|Critique & Rebuttal| Coach[Agent 2: Head Coach]
-    end
-    
-    Coach -->|Final Verdict (JSON)| Tools
-    
-    subgraph "Tool Use (Action)"
-        Tools -->|Schedule Event| GCal[Google Calendar API]
-        Tools -->|Log Decision| UI[React Frontend]
-    end
-
+```text
++----------------+       +----------------------+       +-------------------------------+
+|   User Input   | ----> |   Debate Moderator   | ----> | Drill Sergeant vs Zen Master  |
+| (Sleep, Goals) |       |      (Agent 1)       |       |      (Simulated Debate)       |
++----------------+       +----------------------+       +-------------------------------+
+                                                                        |
+                                                                        v
+                                                                +----------------+
+                                                                |   Head Coach   |
+                                                                |   (Arbiter)    |
+                                                                +----------------+
+                                                                        |
+                                                ----------------------------------------
+                                                |                                      |
+                                                v                                      v
+                                     +---------------------+                +--------------------+
+                                     |   Google Calendar   |                |   React Frontend   |
+                                     |   (Schedule Event)  |                | (Transparent Logs) |
+                                     +---------------------+                +--------------------+
 ```
 
 ### **The Agents**
