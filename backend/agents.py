@@ -7,11 +7,11 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Setup LLM using LangChain (Most stable for Gemini 1.5 Flash)
+# Use Gemini 1.5 Flash (Faster & Cheaper)
 llm = ChatGoogleGenerativeAI(
-    model="gemini-1.5-flash",
+    model="gemini-flash-latest",
     verbose=True,
-    temperature=0.7,
+    temperature=0.6,
     google_api_key=os.getenv("GOOGLE_API_KEY")
 )
 
@@ -19,8 +19,8 @@ class FitAgents:
     def drill_sergeant(self):
         return Agent(
             role='Drill Sergeant',
-            goal='Maximize consistency and training intensity.',
-            backstory="Hardened military fitness instructor. You hate excuses and love high intensity.",
+            goal='Maximize training intensity.',
+            backstory="Hardened military instructor. You speak in short, punchy sentences. No fluff.",
             verbose=True,
             allow_delegation=False,
             llm=llm
@@ -29,8 +29,8 @@ class FitAgents:
     def zen_master(self):
         return Agent(
             role='Zen Master',
-            goal='Minimize injury and burnout.',
-            backstory="Wise yoga and recovery expert. You prioritize longevity and mental health.",
+            goal='Maximize recovery.',
+            backstory="Yoga expert. You speak calmly and briefly. You prioritize sleep and health.",
             verbose=True,
             allow_delegation=False,
             llm=llm
@@ -39,8 +39,8 @@ class FitAgents:
     def head_coach(self):
         return Agent(
             role='Head Coach',
-            goal='Balance performance and recovery.',
-            backstory="Pragmatic head coach. You listen to both sides and make the final call.",
+            goal='Make a final decision and execute it.',
+            backstory="Pragmatic coach. You listen to the team and make a quick decision.",
             verbose=True,
             allow_delegation=False,
             tools=[CalendarUpdateTool()],
@@ -50,43 +50,50 @@ class FitAgents:
 class FitTasks:
     def propose_intensity(self, agent, user_input):
         return Task(
-            description=f"Based on this user profile: {user_input}, propose a high-intensity workout plan. Be aggressive.",
+            description=f"User Stats: {user_input}. Propose a high-intensity workout. MAX 2 SENTENCES.",
             agent=agent,
-            expected_output="A short, intense workout proposal string."
+            expected_output="A short, aggressive workout proposal."
         )
 
     def propose_recovery(self, agent, user_input):
         return Task(
-            description=f"Based on this user profile: {user_input}, propose a recovery-focused plan. Be cautious.",
+            description=f"User Stats: {user_input}. Propose a recovery plan. MAX 2 SENTENCES.",
             agent=agent,
-            expected_output="A short, recovery-focused proposal string."
+            expected_output="A short, gentle recovery proposal."
         )
 
     def critique_recovery(self, agent, context):
         return Task(
-            description="Critique the recovery proposal. Explain why it is too soft or lazy.",
+            description="Critique the recovery plan. Explain why it's lazy. MAX 1 SENTENCE.",
             agent=agent,
             context=context,
-            expected_output="A critique string."
+            expected_output="A single sentence critique."
         )
 
     def critique_intensity(self, agent, context):
         return Task(
-            description="Critique the intensity proposal. Explain why it is dangerous or unsustainable.",
+            description="Critique the intensity plan. Explain why it's dangerous. MAX 1 SENTENCE.",
             agent=agent,
             context=context,
-            expected_output="A critique string."
+            expected_output="A single sentence critique."
         )
 
     def final_decision(self, agent, context, user_input):
         return Task(
-            description="Review the proposals and critiques. Create a final balanced plan. "
-                        "You MUST return a JSON object with these exact keys: "
-                        "'final_plan' (string), 'duration_minutes' (int), 'reasoning' (string). "
-                        "Do not wrap in markdown.",
+            description=(
+                "Review the debate. Create a final plan. "
+                "Use the 'Update Workout Calendar' tool to schedule it. "
+                "YOU MUST RETURN JSON ONLY. NO MARKDOWN. "
+                "Format: {"
+                "\"final_plan\": \"Short title (e.g. 5k Run)\", "
+                "\"duration_minutes\": 30, "
+                "\"reasoning\": \"One short sentence explaining why.\", "
+                "\"confidence_score\": 0.95"
+                "}"
+            ),
             agent=agent,
             context=context,
-            expected_output="A valid JSON string.",
+            expected_output="Valid JSON String only.",
         )
 
 class FitCrew:
@@ -112,15 +119,7 @@ class FitCrew:
             verbose=True,
             process=Process.sequential,
             manager_llm=llm,
-            memory=False, 
-            # FIXED EMBEDDER CONFIGURATION BELOW:
-            embedder={
-                "provider": "google-generativeai",
-                "config": {
-                    "model": "models/embedding-001",
-                    "api_key": os.getenv("GOOGLE_API_KEY"),
-                }
-            }
+            memory=False, # Disable memory for speed
         )
 
         final_output = crew.kickoff()
