@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+backend/venv/
+venv/
+.venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+backend/credentials.json
+backend/token.json
+
+# Build outputs
+dist/
+build/
+frontend/dist/
+
+# System Files
+.DS_Store
+Thumbs.db

@@ -1,0 +1,13 @@
+crewai
+crewai-tools
+langchain_google_genai
+fastapi
+uvicorn
+# psycopg2-binary
+# sqlalchemy
+supabase
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib
+python-dotenv
+pydantic
