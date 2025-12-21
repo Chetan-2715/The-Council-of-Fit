@@ -14,9 +14,10 @@ function App() {
   const [logs, setLogs] = useState([]);
   const [decision, setDecision] = useState(null);
   const [loadingText, setLoadingText] = useState("Summoning the Council...");
+  const [showDebate, setShowDebate] = useState(false); // <--- NEW STATE FOR COLLAPSE
   const resultsRef = useRef(null);
 
-  // 1. ANIMATED LOADING TEXT LOGIC
+  // Animated Loading Text Logic
   useEffect(() => {
     if (status === 'loading') {
       const messages = [
@@ -28,12 +29,12 @@ function App() {
         "Zen Master is suggesting meditation..."
       ];
       let i = 0;
-      setLoadingText(messages[0]); // Show first immediately
+      setLoadingText(messages[0]);
 
       const interval = setInterval(() => {
         i = (i + 1) % messages.length;
         setLoadingText(messages[i]);
-      }, 2000); // Change text every 2 seconds
+      }, 2000);
 
       return () => clearInterval(interval);
     }
@@ -52,6 +53,7 @@ function App() {
     setStatus('loading');
     setLogs([]);
     setDecision(null);
+    setShowDebate(false); // Reset debate visibility on new search
 
     try {
       const response = await fetch('http://localhost:8000/api/consult_council', {
@@ -75,7 +77,6 @@ function App() {
     }
   };
 
-  // Helper to format text into bullets
   const formatPoints = (text) => {
     if (!text) return null;
     const points = text.split(/(?:\r\n|\r|\n|(?<=[.!?])\s+)/).filter(p => p.trim().length > 3);
@@ -153,11 +154,10 @@ function App() {
         {/* RESULTS SECTION */}
         <div ref={resultsRef} style={{ textAlign: 'left', minHeight: '50vh' }}>
 
-          {/* 2. LOADING STATE WITH ANIMATION */}
+          {/* LOADING STATE */}
           {status === 'loading' && (
             <div className="glass-card" style={{ textAlign: 'center', padding: '3rem' }}>
               <div className="spinner"></div>
-              {/* This text will now change every 2 seconds */}
               <p style={{ color: '#a78bfa', fontWeight: '500', fontSize: '1.1rem', animation: 'fadeIn 0.5s' }}>
                 {loadingText}
               </p>
@@ -191,24 +191,63 @@ function App() {
                 </div>
               </div>
 
-              {/* Chat Transcript */}
-              <h3 style={{ fontSize: '0.9rem', color: '#fff', marginLeft: '0.25rem', marginBottom: '0.75rem', opacity: 0.8 }}>📜 Council Transcript</h3>
-              <div className="chat-container">
-                {logs.map((log, index) => {
-                  let type = 'coach';
-                  if (log.agent.includes('Drill')) type = 'drill';
-                  if (log.agent.includes('Zen')) type = 'zen';
+              {/* ---------------- NEW SECTION: MEET THE COUNCIL ---------------- */}
+              <div style={{ marginBottom: '1rem', padding: '0 0.5rem' }}>
+                <p style={{ fontSize: '0.8rem', color: '#94a3b8', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Meet the Council Members:</p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
 
-                  return (
-                    <div key={index} className={`glass-card chat-bubble ${type}`}>
-                      <strong style={{ display: 'block', fontSize: '0.75rem', textTransform: 'uppercase', marginBottom: '0.25rem', opacity: 0.7 }}>
-                        {log.agent}
-                      </strong>
-                      {formatPoints(log.content)}
-                    </div>
-                  )
-                })}
+                  {/* Drill Sergeant Profile */}
+                  <div style={{ background: 'rgba(239, 68, 68, 0.1)', padding: '0.75rem', borderRadius: '8px', borderLeft: '3px solid #ef4444' }}>
+                    <strong style={{ color: '#ef4444', fontSize: '0.8rem', display: 'block' }}>Drill Sergeant</strong>
+                    <span style={{ fontSize: '0.75rem', color: '#cbd5e1' }}>Cares about <b>Intensity</b> & <b>Consistency</b>. Hates excuses.</span>
+                  </div>
+
+                  {/* Zen Master Profile */}
+                  <div style={{ background: 'rgba(16, 185, 129, 0.1)', padding: '0.75rem', borderRadius: '8px', borderLeft: '3px solid #10b981' }}>
+                    <strong style={{ color: '#10b981', fontSize: '0.8rem', display: 'block' }}>Zen Master</strong>
+                    <span style={{ fontSize: '0.75rem', color: '#cbd5e1' }}>Cares about <b>Recovery</b> & <b>Longevity</b>. Prioritizes sleep.</span>
+                  </div>
+
+                </div>
               </div>
+
+              {/* ---------------- COLLAPSIBLE DEBATE SECTION ---------------- */}
+              <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
+                <button
+                  onClick={() => setShowDebate(!showDebate)}
+                  style={{
+                    background: 'transparent',
+                    border: '1px solid #334155',
+                    fontSize: '0.8rem',
+                    padding: '0.5rem 1rem',
+                    width: 'auto',
+                    color: '#94a3b8'
+                  }}
+                >
+                  {showDebate ? " Hide Debate Transcript ▴" : "📜 Click to see the debate ▾"}
+                </button>
+              </div>
+
+              {/* Only show logs if showDebate is true */}
+              {showDebate && (
+                <div className="chat-container" style={{ animation: 'fadeIn 0.3s ease' }}>
+                  {logs.map((log, index) => {
+                    let type = 'coach';
+                    if (log.agent.includes('Drill')) type = 'drill';
+                    if (log.agent.includes('Zen')) type = 'zen';
+
+                    return (
+                      <div key={index} className={`glass-card chat-bubble ${type}`}>
+                        <strong style={{ display: 'block', fontSize: '0.75rem', textTransform: 'uppercase', marginBottom: '0.25rem', opacity: 0.7 }}>
+                          {log.agent}
+                        </strong>
+                        {formatPoints(log.content)}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
             </div>
           )}
 

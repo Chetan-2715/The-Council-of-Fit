@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Use Gemini 1.5 Flash (Faster & Cheaper)
+# Use "gemini-1.5-flash"
 llm = ChatGoogleGenerativeAI(
     model="gemini-flash-latest",
     verbose=True,
@@ -16,21 +16,16 @@ llm = ChatGoogleGenerativeAI(
 )
 
 class FitAgents:
-    def drill_sergeant(self):
+    def debate_moderator(self):
         return Agent(
-            role='Drill Sergeant',
-            goal='Maximize training intensity.',
-            backstory="Hardened military instructor. You speak in short, punchy sentences. No fluff.",
-            verbose=True,
-            allow_delegation=False,
-            llm=llm
-        )
-
-    def zen_master(self):
-        return Agent(
-            role='Zen Master',
-            goal='Maximize recovery.',
-            backstory="Yoga expert. You speak calmly and briefly. You prioritize sleep and health.",
+            role='Debate Moderator',
+            goal='Simulate a debate that is understandable to a beginner but uses real gym terminology.',
+            backstory=(
+                "You are the narrator of a fitness debate. "
+                "You ensure the speakers use gym slang (like RPE, AMRAP, hypertrophy) but ALWAYS frame it "
+                "so a beginner understands the vibe. "
+                "The Drill Sergeant is intense. The Zen Master is calm."
+            ),
             verbose=True,
             allow_delegation=False,
             llm=llm
@@ -39,8 +34,8 @@ class FitAgents:
     def head_coach(self):
         return Agent(
             role='Head Coach',
-            goal='Make a final decision and execute it.',
-            backstory="Pragmatic coach. You listen to the team and make a quick decision.",
+            goal='Make a final decision that is actionable for a normal person.',
+            backstory="Pragmatic coach. You translate technical debates into a clear, scheduled plan.",
             verbose=True,
             allow_delegation=False,
             tools=[CalendarUpdateTool()],
@@ -48,48 +43,37 @@ class FitAgents:
         )
 
 class FitTasks:
-    def propose_intensity(self, agent, user_input):
+    def generate_debate(self, agent, user_input):
         return Task(
-            description=f"User Stats: {user_input}. Propose a high-intensity workout. MAX 2 SENTENCES.",
+            description=(
+                f"User Stats: {user_input}\n"
+                "Write a script of a debate between 'Drill Sergeant' and 'Zen Master'.\n"
+                "CRITICAL INSTRUCTION: Use gym terms (like RPE, AMRAP, CNS Fatigue) but keep the sentences simple enough for a beginner to understand the context.\n"
+                "For example: 'Hit RPE 9—stop one rep before you fail!' or 'Watch your CNS—your nervous system is fried.'\n\n"
+                "- Drill Sergeant: Demands intensity. Uses terms like Progressive Overload, Failure, RPE.\n"
+                "- Zen Master: Demands recovery. Uses terms like Cortisol, Autoregulation, CNS.\n"
+                "Exchange 2 rounds (4 lines total).\n"
+                "Format EXACTLY like this:\n"
+                "Drill Sergeant: [Argument]\n"
+                "Zen Master: [Counter-argument]\n"
+                "Drill Sergeant: [Rebuttal]\n"
+                "Zen Master: [Final point]"
+            ),
             agent=agent,
-            expected_output="A short, aggressive workout proposal."
-        )
-
-    def propose_recovery(self, agent, user_input):
-        return Task(
-            description=f"User Stats: {user_input}. Propose a recovery plan. MAX 2 SENTENCES.",
-            agent=agent,
-            expected_output="A short, gentle recovery proposal."
-        )
-
-    def critique_recovery(self, agent, context):
-        return Task(
-            description="Critique the recovery plan. Explain why it's lazy. MAX 1 SENTENCE.",
-            agent=agent,
-            context=context,
-            expected_output="A single sentence critique."
-        )
-
-    def critique_intensity(self, agent, context):
-        return Task(
-            description="Critique the intensity plan. Explain why it's dangerous. MAX 1 SENTENCE.",
-            agent=agent,
-            context=context,
-            expected_output="A single sentence critique."
+            expected_output="A dialogue script string."
         )
 
     def final_decision(self, agent, context, user_input):
         return Task(
             description=(
-                "Review the debate. Create a final plan. "
-                "Use the 'Update Workout Calendar' tool to schedule it. "
-                "YOU MUST RETURN JSON ONLY. NO MARKDOWN. "
-                "Format: {"
-                "\"final_plan\": \"Short title (e.g. 5k Run)\", "
-                "\"duration_minutes\": 30, "
-                "\"reasoning\": \"One short sentence explaining why.\", "
-                "\"confidence_score\": 0.95"
-                "}"
+                "Review the debate arguments above. Create a final actionable plan.\n"
+                "Use the 'Update Workout Calendar' tool to schedule it.\n"
+                "CRITICAL: You must return a JSON object with these EXACT keys:\n"
+                "- final_plan (string, e.g. '30 Min HIIT')\n"
+                "- duration_minutes (int)\n"
+                "- reasoning (string, simple explanation)\n"
+                "- confidence_score (float, 0.0 to 1.0)\n\n"
+                "Do not include markdown formatting like ```json."
             ),
             agent=agent,
             context=context,
@@ -103,36 +87,40 @@ class FitCrew:
         self.tasks = FitTasks()
 
     def run(self):
-        drill = self.agents.drill_sergeant()
-        zen = self.agents.zen_master()
+        moderator = self.agents.debate_moderator()
         coach = self.agents.head_coach()
 
-        task1 = self.tasks.propose_intensity(drill, self.user_input)
-        task2 = self.tasks.propose_recovery(zen, self.user_input)
-        task3 = self.tasks.critique_recovery(drill, [task2])
-        task4 = self.tasks.critique_intensity(zen, [task1])
-        task5 = self.tasks.final_decision(coach, [task1, task2, task3, task4], self.user_input)
+        # 1. Generate the whole debate in ONE call
+        task_debate = self.tasks.generate_debate(moderator, self.user_input)
+        
+        # 2. Make decision in ONE call
+        task_verdict = self.tasks.final_decision(coach, [task_debate], self.user_input)
 
         crew = Crew(
-            agents=[drill, zen, coach],
-            tasks=[task1, task2, task3, task4, task5],
+            agents=[moderator, coach],
+            tasks=[task_debate, task_verdict],
             verbose=True,
             process=Process.sequential,
             manager_llm=llm,
-            memory=False, # Disable memory for speed
+            memory=False,
         )
 
         final_output = crew.kickoff()
 
-        logs = [
-            {"agent": "Drill Sergeant", "step": "Proposal", "content": str(task1.output)},
-            {"agent": "Zen Master", "step": "Proposal", "content": str(task2.output)},
-            {"agent": "Drill Sergeant", "step": "Critique", "content": str(task3.output)},
-            {"agent": "Zen Master", "step": "Critique", "content": str(task4.output)},
-            {"agent": "Head Coach", "step": "Verdict", "content": str(task5.output)}
-        ]
+        # --- LOG PARSER ---
+        debate_text = str(task_debate.output)
+        parsed_logs = []
+        
+        for line in debate_text.split('\n'):
+            clean_line = line.strip()
+            if clean_line.startswith("Drill Sergeant:"):
+                parsed_logs.append({"agent": "Drill Sergeant", "content": clean_line.replace("Drill Sergeant:", "").strip()})
+            elif clean_line.startswith("Zen Master:"):
+                parsed_logs.append({"agent": "Zen Master", "content": clean_line.replace("Zen Master:", "").strip()})
+        
+        parsed_logs.append({"agent": "Head Coach", "content": "I have reviewed the debate. Here is the actionable plan."})
 
         return {
             "final_decision": str(final_output),
-            "logs": logs
+            "logs": parsed_logs
         }

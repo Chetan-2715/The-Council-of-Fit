@@ -1,100 +1,132 @@
-# The Council of Fit
 
-**Agentic Fitness System powered by CrewAI and Gemini.**
+# 🏛️ The Council of Fit
 
-## 🎯 System Goal
-A multi-agent system where conflicting philosophies (Performance vs. Recovery) debate to reach a consensus on your daily workout, executing the final decision directly to your Google Calendar.
+### *An Agentic Fitness Arbitration System*
 
-## 🧠 Architecture
+---
 
-The system consists of three main agents:
-1.  **Drill Sergeant (Performance)**: Maximizes intensity.
-2.  **Zen Master (Recovery)**: Prioritizes health and rest.
-3.  **Head Coach (Arbiter)**: Makes the final decision and updates the calendar.
+## 1. 🔍 Problem Definition
 
-## 🛠 Tech Stack
--   **Orchestration**: CrewAI
--   **LLM**: Gemini API (Free Tier)
--   **Backend**: Python (FastAPI)
--   **Frontend**: React (Vite)
--   **Database**: PostgreSQL
--   **Tools**: Google Calendar API
+**"Why do fitness apps fail?"**
+Most fitness apps are passive trackers. They show you data (e.g., "You slept 5 hours"), but they don't **act** on it. Users are left to decide: *"Should I push through the fatigue or rest?"* This decision fatigue often leads to burnout or injury.
 
-## 🚀 Setup Instructions
+**The Solution:**
+**The Council of Fit** is an Agentic System that removes the burden of decision-making. Instead of a static algorithm, we simulate a **live debate** between opposing fitness philosophies:
 
-### 1. Prerequisites
--   Python 3.10+
--   Node.js 18+
--   PostgreSQL installed and running
--   Google Cloud Console Project with Calendar API enabled (credentials.json)
+* **The Drill Sergeant:** Prioritizes intensity and consistency.
+* **The Zen Master:** Prioritizes recovery and longevity.
+* **The Head Coach:** Arbitrates the debate and **executes** the final decision to your real-world calendar.
 
-### 2. Backend Setup
+---
+
+## 2. 🧠 Agentic Architecture
+
+The system uses **CrewAI** to orchestrate a multi-agent workflow. We use a unique **"Simulated Debate" pattern** to maximize reasoning depth while minimizing API latency.
+
+```mermaid
+graph TD
+    User((User Input)) -->|JSON: Sleep, Stress, Goals| Debate[Agent 1: Debate Moderator]
+    
+    subgraph "The Council (Gemini 1.5 Flash)"
+        Debate -->|Generates Script| Script[Drill Sergeant vs Zen Master]
+        Script -->|Critique & Rebuttal| Coach[Agent 2: Head Coach]
+    end
+    
+    Coach -->|Final Verdict (JSON)| Tools
+    
+    subgraph "Tool Use (Action)"
+        Tools -->|Schedule Event| GCal[Google Calendar API]
+        Tools -->|Log Decision| UI[React Frontend]
+    end
+
+```
+
+### **The Agents**
+
+| Agent | Role | Philosophy |
+| --- | --- | --- |
+| **Drill Sergeant** | **Performance** | *"If you aren't shaking, you wasted your time."* Advocating for progressive overload. |
+| **Zen Master** | **Recovery** | *"Hypertrophy demands adaptation, not exhaustion."* Advocating for cortisol management. |
+| **Head Coach** | **Executor** | The final authority. Parses the debate, applies constraints (time/calendar), and triggers the Calendar Tool. |
+
+---
+
+## 3. 🛠️ Tech Stack & Implementation
+
+This project follows the **"Software Only"** track, utilizing open-source frameworks and free-tier APIs.
+
+* **Orchestration:** [CrewAI](https://github.com/joaomdmoura/crewAI) (Python) - Manages agent roles and task delegation.
+* **LLM Engine:** **Google Gemini 1.5 Flash** (via LangChain) - chosen for its high speed and large context window (essential for handling debate scripts).
+* **Backend:** FastAPI - Serves the agentic workflow as a REST API.
+* **Frontend:** React + Vite - Displays the "live" debate transparency logs.
+* **Tooling:** **Google Calendar API** - Allows the agents to perform real-world actions.
+
+---
+
+## 4. 🚀 Setup & Execution
+
+### **Prerequisites**
+
+* Python 3.10+
+* Node.js 16+
+* A Google Cloud Project with **Calendar API** enabled.
+
+### **Step 1: Backend Setup**
+
 ```bash
 cd backend
 python -m venv venv
-venv\Scripts\activate
+# Windows:
+.venv\Scripts\activate
+# Mac/Linux:
+# source venv/bin/activate
+
 pip install -r requirements.txt
+
 ```
 
-### 3. Environment Variables
-Copy `.env.example` to `.env` and fill in your keys:
--   `GOOGLE_API_KEY`: For Gemini.
--   `SUPABASE_URL`: Your Supabase Project URL.
--   `SUPABASE_ANON_KEY`: Your Supabase Anon Public Key.
--   `GOOGLE_CALENDAR_CREDENTIALS`: Path to your credentials JSON.
+### **Step 2: Environment Variables**
 
-### 4. Database Setup (Supabase)
+Create a `.env` file in the `backend/` folder:
 
-1.  Create a new Supabase Project.
-2.  Go to the **SQL Editor** and run the following script to create the required tables:
+```ini
+GOOGLE_API_KEY="AIzaSy..."  # Your Gemini API Key
 
-```sql
--- User Inputs Table
-create table user_inputs (
-  id uuid default gen_random_uuid() primary key,
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
-  age int,
-  goal text,
-  sleep_hours float,
-  stress_level text,
-  soreness text,
-  available_time_minutes int
-);
-
--- Agent Logs Table
-create table agent_logs (
-  id uuid default gen_random_uuid() primary key,
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
-  input_id uuid references user_inputs(id),
-  agent_name text,
-  content text
-);
-
--- Decisions Table
-create table decisions (
-  id uuid default gen_random_uuid() primary key,
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
-  input_id uuid references user_inputs(id),
-  final_plan text,
-  duration_minutes int,
-  reasoning text,
-  confidence_score float
-);
 ```
-3.  Ensure Row Level Security (RLS) policies allow insertion if you have RLS enabled (or disable RLS for this demo).
 
-### 5. Frontend Setup
+*Note: Place your `credentials.json` (from Google Cloud) in the `backend/` folder for Calendar access.*
+
+### **Step 3: Frontend Setup**
+
 ```bash
 cd frontend
 npm install
 npm run dev
+
 ```
 
-### 6. Usage
-1.  Open the web UI.
-2.  Enter your daily stats (Sleep, Stress, Soreness, Time).
-3.  Watch the agents debate in real-time.
-4.  See the final verdict and check your Google Calendar!
+### **Step 4: Running the System**
 
-## ⚠️ Disclaimer
-This system provides fitness suggestions based on AI logic. It is not a medical device. Always consult a physician before starting a new fitness regime.
+1. Start the Backend: `python main.py`
+2. Start the Frontend: `npm run dev`
+3. Open `http://localhost:5173`.
+4. Enter your stats (e.g., Sleep: 4 hours, Goal: Muscle).
+5. **Watch the debate unfold and check your Google Calendar!**
+
+---
+
+## 5. 🌟 Key Innovations
+
+1. **Transparency:** Unlike black-box models, the user sees *exactly* why a decision was made by reading the debate transcript.
+2. **Conflict-Driven Reasoning:** By forcing agents to argue, we reduce hallucinations and ensure both safety (Zen) and progress (Drill) are considered.
+3. **True Agency:** The system doesn't just suggest; it **schedules**. It modifies the user's environment.
+
+---
+
+## 6. ⚠️ Ethical Disclaimer
+
+*This system is a proof-of-concept for the Innov-AI-thon. It uses AI to provide fitness suggestions but is not a substitute for professional medical advice. The "Drill Sergeant" personality is designed to be aggressive for entertainment/motivation purposes only.*
+
+---
+
+## Made with ❤️ by Syntax Squad 

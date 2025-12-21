@@ -4,7 +4,7 @@ from agents import FitCrew
 from database.supabase_service import save_user_input, save_agent_logs, save_final_decision
 import json
 import uvicorn
-import re
+import re  # <--- Added Regex module
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="The Council of Fit API")
@@ -30,37 +30,44 @@ async def consult_council(data: UserData):
     try:
         user_input_dict = data.model_dump()
         
-        # 1. Run the Crew
+        # 1. Run the Agent Crew
         crew = FitCrew(user_input_dict)
         result = crew.run()
         
-        # 2. Robust JSON Extraction
+        # 2. ROBUST JSON EXTRACTION (The Fix)
         final_text = result['final_decision']
         decision_data = {}
         
         try:
-            # Find the JSON object inside the text using Regex
-            json_match =KP = re.search(r"\{.*\}", final_text, re.DOTALL)
+            # Look for a JSON object starts with '{' and ends with '}'
+            # re.DOTALL allows the dot to match newlines
+            json_match = re.search(r"\{.*\}", final_text, re.DOTALL)
+            
             if json_match:
                 json_str = json_match.group(0)
                 decision_data = json.loads(json_str)
             else:
-                raise ValueError("No JSON found")
+                raise ValueError("No JSON object found in response")
+                
         except Exception as e:
             print(f"JSON Parse Error: {e}")
-            # Fallback if AI fails
+            print(f"Raw Output: {final_text}")
+            # Fallback so the UI doesn't crash
             decision_data = {
-                "final_plan": "Consultation Complete",
+                "final_plan": "Consultation Complete (Parse Error)",
                 "duration_minutes": 0,
-                "reasoning": final_text[:100] + "...",
+                "reasoning": "The Council debated, but the final verdict format was invalid. Please check the transcript.",
                 "confidence_score": 0.0
             }
 
-        # 3. Save to DB (Optional)
-        saved_input = save_user_input(user_input_dict)
-        if saved_input:
-            save_agent_logs(saved_input['id'], result['logs'])
-            save_final_decision(saved_input['id'], decision_data)
+        # 3. Save to DB (Optional - verify Supabase is connected)
+        try:
+            saved_input = save_user_input(user_input_dict)
+            if saved_input:
+                save_agent_logs(saved_input['id'], result['logs'])
+                save_final_decision(saved_input['id'], decision_data)
+        except Exception as db_err:
+            print(f"Database Error: {db_err}")
 
         return {
             "decision": decision_data,
