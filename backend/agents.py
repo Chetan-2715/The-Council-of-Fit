@@ -6,25 +6,21 @@ import os
 from dotenv import load_dotenv
 
 load_dotenv()
-os.environ["OPENAI_API_KEY"] = "NA"
 
-# Setup LLM
+# Setup LLM using LangChain (Most stable for Gemini 1.5 Flash)
 llm = ChatGoogleGenerativeAI(
-    model="gemini-pro",
+    model="gemini-1.5-flash",
     verbose=True,
     temperature=0.7,
     google_api_key=os.getenv("GOOGLE_API_KEY")
 )
-
-# Force OpenAI Key to exist to bypass validation checks
-os.environ["OPENAI_API_KEY"] = "sk-proj-dummy-key-to-bypass-validation"
 
 class FitAgents:
     def drill_sergeant(self):
         return Agent(
             role='Drill Sergeant',
             goal='Maximize consistency and training intensity.',
-            backstory="Hardened military fitness instructor.",
+            backstory="Hardened military fitness instructor. You hate excuses and love high intensity.",
             verbose=True,
             allow_delegation=False,
             llm=llm
@@ -34,7 +30,7 @@ class FitAgents:
         return Agent(
             role='Zen Master',
             goal='Minimize injury and burnout.',
-            backstory="Wise yoga and recovery expert.",
+            backstory="Wise yoga and recovery expert. You prioritize longevity and mental health.",
             verbose=True,
             allow_delegation=False,
             llm=llm
@@ -44,51 +40,53 @@ class FitAgents:
         return Agent(
             role='Head Coach',
             goal='Balance performance and recovery.',
-            backstory="Pragmatic head coach.",
+            backstory="Pragmatic head coach. You listen to both sides and make the final call.",
             verbose=True,
             allow_delegation=False,
             tools=[CalendarUpdateTool()],
-            llm=llm,
-            function_calling_llm=llm 
+            llm=llm
         )
 
 class FitTasks:
     def propose_intensity(self, agent, user_input):
         return Task(
-            description=f"Propose intensity for {user_input}",
+            description=f"Based on this user profile: {user_input}, propose a high-intensity workout plan. Be aggressive.",
             agent=agent,
-            expected_output="Intensity proposal"
+            expected_output="A short, intense workout proposal string."
         )
 
     def propose_recovery(self, agent, user_input):
         return Task(
-            description=f"Propose recovery for {user_input}",
+            description=f"Based on this user profile: {user_input}, propose a recovery-focused plan. Be cautious.",
             agent=agent,
-            expected_output="Recovery proposal"
+            expected_output="A short, recovery-focused proposal string."
         )
 
     def critique_recovery(self, agent, context):
         return Task(
-            description="Critique recovery",
+            description="Critique the recovery proposal. Explain why it is too soft or lazy.",
             agent=agent,
             context=context,
-            expected_output="Critique"
+            expected_output="A critique string."
         )
 
     def critique_intensity(self, agent, context):
         return Task(
-            description="Critique intensity",
+            description="Critique the intensity proposal. Explain why it is dangerous or unsustainable.",
             agent=agent,
             context=context,
-            expected_output="Critique"
+            expected_output="A critique string."
         )
 
     def final_decision(self, agent, context, user_input):
         return Task(
-            description="Final decision. Return JSON.",
+            description="Review the proposals and critiques. Create a final balanced plan. "
+                        "You MUST return a JSON object with these exact keys: "
+                        "'final_plan' (string), 'duration_minutes' (int), 'reasoning' (string). "
+                        "Do not wrap in markdown.",
             agent=agent,
             context=context,
-            expected_output="JSON string",
+            expected_output="A valid JSON string.",
         )
 
 class FitCrew:
@@ -114,7 +112,15 @@ class FitCrew:
             verbose=True,
             process=Process.sequential,
             manager_llm=llm,
-            memory=False
+            memory=False, 
+            # FIXED EMBEDDER CONFIGURATION BELOW:
+            embedder={
+                "provider": "google-generativeai",
+                "config": {
+                    "model": "models/embedding-001",
+                    "api_key": os.getenv("GOOGLE_API_KEY"),
+                }
+            }
         )
 
         final_output = crew.kickoff()

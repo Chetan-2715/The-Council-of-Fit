@@ -41,9 +41,9 @@ async def consult_council(data: UserData):
         result = crew.run()
         
         # Parse Final Decision
+        # FIX: Clean the JSON string before parsing
         final_json_str = result['final_decision']
-        # Note: LLM might return "```json ... ```". Need to clean.
-        cleaned_json = final_json_str.replace("```json", "").replace("```", "").strip()
+        cleaned_json = final_json_str.replace("```json", "").replace("```", "").replace("json\n", "").strip()
         
         try:
             decision_data = json.loads(cleaned_json)
