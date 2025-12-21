@@ -1,18 +1,17 @@
 
 # 🏛️ The Council of Fit
-
 ### *An Agentic Fitness Arbitration System*
+
+![Status](https://img.shields.io/badge/Status-Hackathon_Complete-success) ![Tech](https://img.shields.io/badge/AI-CrewAI_%7C_Gemini_1.5_Flash-blue) ![Tool](https://img.shields.io/badge/Tool-Google_Calendar_Integration-yellow)
 
 ---
 
 ## 1. 🔍 Problem Definition
-
 **"Why do fitness apps fail?"**
 Most fitness apps are passive trackers. They show you data (e.g., "You slept 5 hours"), but they don't **act** on it. Users are left to decide: *"Should I push through the fatigue or rest?"* This decision fatigue often leads to burnout or injury.
 
 **The Solution:**
 **The Council of Fit** is an Agentic System that removes the burden of decision-making. Instead of a static algorithm, we simulate a **live debate** between opposing fitness philosophies:
-
 * **The Drill Sergeant:** Prioritizes intensity and consistency.
 * **The Zen Master:** Prioritizes recovery and longevity.
 * **The Head Coach:** Arbitrates the debate and **executes** the final decision to your real-world calendar.
@@ -77,7 +76,7 @@ This project follows the **"Software Only"** track, utilizing open-source framew
 cd backend
 python -m venv venv
 # Windows:
-.venv\Scripts\activate
+venv\Scripts\activate
 # Mac/Linux:
 # source venv/bin/activate
 
@@ -90,8 +89,9 @@ pip install -r requirements.txt
 Create a `.env` file in the `backend/` folder:
 
 ```ini
-GOOGLE_API_KEY="AIzaSy..."  # Your Gemini API Key
-
+GOOGLE_API_KEY=
+SUPABASE_URL=
+SUPABASE_ANON_KEY=
 ```
 
 *Note: Place your `credentials.json` (from Google Cloud) in the `backend/` folder for Calendar access.*
@@ -129,4 +129,4 @@ npm run dev
 
 ---
 
-## Made with ❤️ by Syntax Squad 
+**Made with ❤️ by Syntax Squad**
