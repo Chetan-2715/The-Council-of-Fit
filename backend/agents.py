@@ -44,17 +44,20 @@ class FitAgents:
 
 class FitTasks:
     def generate_debate(self, agent, user_input):
+        history_context = user_input.get('recent_activity', 'No history')
+        
         return Task(
             description=(
                 f"User Stats: {user_input}\n"
-                "Write a script of a debate between 'Drill Sergeant' and 'Zen Master'.\n"
-                "CRITICAL INSTRUCTION: Use gym terms (like RPE, AMRAP, CNS Fatigue) but keep the sentences simple enough for a beginner to understand the context.\n"
-                "For example: 'Hit RPE 9—stop one rep before you fail!' or 'Watch your CNS—your nervous system is fried.'\n\n"
-                "- Drill Sergeant: Demands intensity. Uses terms like Progressive Overload, Failure, RPE.\n"
-                "- Zen Master: Demands recovery. Uses terms like Cortisol, Autoregulation, CNS.\n"
-                "Exchange 2 rounds (4 lines total).\n"
+                f"PAST HISTORY (The Brain): {history_context}\n\n"
+                "Write a debate script between 'Drill Sergeant' and 'Zen Master'.\n"
+                "CRITICAL INSTRUCTION: You MUST start the debate by referencing the PAST HISTORY.\n"
+                "Examples:\n"
+                "- 'I see you skipped yesterday! No excuses!'\n"
+                "- 'You went heavy yesterday, soldier. Today we focus on form.'\n"
+                "- If 'No previous history', say: 'Welcome to your first day, recruit!'\n\n"
                 "Format EXACTLY like this:\n"
-                "Drill Sergeant: [Argument]\n"
+                "Drill Sergeant: [Opening line referencing history]\n"
                 "Zen Master: [Counter-argument]\n"
                 "Drill Sergeant: [Rebuttal]\n"
                 "Zen Master: [Final point]"

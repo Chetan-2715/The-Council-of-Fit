@@ -19,12 +19,15 @@ def save_agent_logs(input_id: str, logs: list):
         for log in logs:
             records.append({
                 "input_id": input_id,
-                "agent_name": f"{log['agent']} ({log['step']})",
-                "content": log['content']
+                # FIXED: Removed 'step' which caused errors, just use agent name
+                "agent_name": log.get('agent', 'Unknown Agent'), 
+                "content": log.get('content', '')
             })
         
-        response = supabase.table('agent_logs').insert(records).execute()
-        return response.data
+        if records:
+            response = supabase.table('agent_logs').insert(records).execute()
+            return response.data
+        return []
     except Exception as e:
         print(f"Error saving agent logs: {e}")
         return []
@@ -45,9 +48,10 @@ def save_final_decision(input_id: str, decision_data: dict):
         print(f"Error saving decision: {e}")
         return None
 
-def fetch_recent_decisions(limit=5):
-    """Fetches recent decisions for history."""
+def fetch_recent_decisions(limit=3):
+    """Fetches recent decisions for the Brain."""
     try:
+        # Fetch the last 3 decisions to give context
         response = supabase.table('decisions').select("*").order('created_at', desc=True).limit(limit).execute()
         return response.data
     except Exception as e:

@@ -1,10 +1,15 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from agents import FitCrew
-from database.supabase_service import save_user_input, save_agent_logs, save_final_decision
+from database.supabase_service import (
+    save_user_input, 
+    save_agent_logs, 
+    save_final_decision, 
+    fetch_recent_decisions # <--- IMPORT THE BRAIN FETCH
+)
 import json
 import uvicorn
-import re  # <--- Added Regex module
+import re
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="The Council of Fit API")
@@ -25,42 +30,59 @@ class UserData(BaseModel):
     soreness: str
     available_time_minutes: int
 
+# --- 🧠 SUPABASE BRAIN LOGIC ---
+def get_memory_context():
+    """Fetches the last 3 decisions from Supabase to give agents context."""
+    decisions = fetch_recent_decisions(limit=3)
+    
+    if not decisions:
+        return "No previous history. This is the first session."
+    
+    # Format the DB rows into a string the Agents can read
+    summary = []
+    for d in decisions:
+        # Extract date (e.g., 2023-10-25) and Plan
+        date_str = d.get('created_at', '').split('T')[0] 
+        plan = d.get('final_plan', 'Unknown Plan')
+        summary.append(f"- {date_str}: {plan}")
+    
+    return "\n".join(summary)
+# -------------------------------
+
 @app.post("/api/consult_council")
 async def consult_council(data: UserData):
     try:
         user_input_dict = data.model_dump()
         
-        # 1. Run the Agent Crew
+        # 1. INJECT MEMORY FROM SUPABASE
+        # The agents now read from your real database!
+        user_input_dict['history'] = get_memory_context()
+        
+        # 2. Run the Agent Crew
         crew = FitCrew(user_input_dict)
         result = crew.run()
         
-        # 2. ROBUST JSON EXTRACTION (The Fix)
+        # 3. Extract JSON
         final_text = result['final_decision']
         decision_data = {}
         
         try:
-            # Look for a JSON object starts with '{' and ends with '}'
-            # re.DOTALL allows the dot to match newlines
             json_match = re.search(r"\{.*\}", final_text, re.DOTALL)
-            
             if json_match:
                 json_str = json_match.group(0)
                 decision_data = json.loads(json_str)
             else:
-                raise ValueError("No JSON object found in response")
-                
+                raise ValueError("No JSON object found")
         except Exception as e:
             print(f"JSON Parse Error: {e}")
-            print(f"Raw Output: {final_text}")
-            # Fallback so the UI doesn't crash
             decision_data = {
                 "final_plan": "Consultation Complete (Parse Error)",
                 "duration_minutes": 0,
-                "reasoning": "The Council debated, but the final verdict format was invalid. Please check the transcript.",
+                "reasoning": "The Council debated, but the format was invalid.",
                 "confidence_score": 0.0
             }
 
-        # 3. Save to DB (Optional - verify Supabase is connected)
+        # 4. SAVE TO SUPABASE (This updates the Brain for next time)
         try:
             saved_input = save_user_input(user_input_dict)
             if saved_input:

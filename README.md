@@ -6,10 +6,11 @@
 ---
 
 ## 1. 🔍 Problem Definition
-**"Why do fitness apps fail?"**
-Most fitness apps are passive trackers. They show you data (e.g., "You slept 5 hours"), but they don't **act** on it. Users are left to decide: *"Should I push through the fatigue or rest?"* This decision fatigue often leads to burnout or injury.
+**"Why do fitness apps fail?"** <br>
+Most fitness apps are passive trackers. They show you data (e.g., "You slept 5 hours"), but they don't **act** on it.<br> 
+Users are left to decide: *"Should I push through the fatigue or rest?"* This decision fatigue often leads to burnout or injury.
 
-**The Solution:**
+**The Solution:**<br>
 **The Council of Fit** is an Agentic System that removes the burden of decision-making. Instead of a static algorithm, we simulate a **live debate** between opposing fitness philosophies:
 * **The Drill Sergeant:** Prioritizes intensity and consistency.
 * **The Zen Master:** Prioritizes recovery and longevity.
@@ -19,18 +20,18 @@ Most fitness apps are passive trackers. They show you data (e.g., "You slept 5 h
 
 ## 2. 🧠 Agentic Architecture
 
-The system uses **CrewAI** to orchestrate a multi-agent workflow. We use a **"Simulated Debate" pattern** to maximize reasoning depth while minimizing API latency.
+The system uses **CrewAI** to orchestrate a multi-agent workflow. We use a **"Simulated Debate" pattern** augmented by a **Long-Term Memory Module** (Supabase) to ensure decisions adapt to the user's history.
 
 ```text
 +----------------+       +----------------------+       +-------------------------------+
 |   User Input   | ----> |   Debate Moderator   | ----> | Drill Sergeant vs Zen Master  |
-| (Sleep, Goals) |       |      (Agent 1)       |       |      (Simulated Debate)       |
-+----------------+       +----------------------+       +-------------------------------+
-                                                                        |
-                                                                        v
-                                                                +----------------+
-                                                                |   Head Coach   |
-                                                                |   (Arbiter)    |
+| (Sleep, Goals) |       | (Reads Past History) |       |      (Simulated Debate)       |
++----------------+       +----------^-----------+       +-------------------------------+
+                                    |                                   |
+                         +----------+----------+                        v
+                         |   Supabase (Brain)  |                +----------------+
+                         |  (Stores Past Logs) |                |   Head Coach   |
+                         +---------------------+                |   (Arbiter)    |
                                                                 +----------------+
                                                                         |
                                                 ----------------------------------------
@@ -40,6 +41,7 @@ The system uses **CrewAI** to orchestrate a multi-agent workflow. We use a **"Si
                                      |   Google Calendar   |                |   React Frontend   |
                                      |   (Schedule Event)  |                | (Transparent Logs) |
                                      +---------------------+                +--------------------+
+
 ```
 
 ### **The Agents**
@@ -56,11 +58,12 @@ The system uses **CrewAI** to orchestrate a multi-agent workflow. We use a **"Si
 
 This project follows the **"Software Only"** track, utilizing open-source frameworks and free-tier APIs.
 
-* **Orchestration:** [CrewAI](https://github.com/joaomdmoura/crewAI) (Python) - Manages agent roles and task delegation.
-* **LLM Engine:** **Google Gemini 1.5 Flash** (via LangChain) - chosen for its high speed and large context window (essential for handling debate scripts).
+* **Orchestration:** CrewAI (Python) - Manages agent roles and task delegation.
+* **LLM Engine:** Google Gemini Flash Latest (via LangChain) - chosen for its high speed and large context window.
+* **Memory/Database:** Supabase - Acts as the system's "Brain," storing past decisions so agents can recall user history.
 * **Backend:** FastAPI - Serves the agentic workflow as a REST API.
 * **Frontend:** React + Vite - Displays the "live" debate transparency logs.
-* **Tooling:** **Google Calendar API** - Allows the agents to perform real-world actions.
+* **Tooling:** Google Calendar API - Allows the agents to perform real-world actions.
 
 ---
 
@@ -71,6 +74,7 @@ This project follows the **"Software Only"** track, utilizing open-source framew
 * Python 3.10+
 * Node.js 16+
 * A Google Cloud Project with **Calendar API** enabled.
+* A Supabase Project (for agent memory).
 
 ### **Step 1: Backend Setup**
 
@@ -91,9 +95,10 @@ pip install -r requirements.txt
 Create a `.env` file in the `backend/` folder:
 
 ```ini
-GOOGLE_API_KEY=
-SUPABASE_URL=
-SUPABASE_ANON_KEY=
+GOOGLE_API_KEY=your_gemini_key
+SUPABASE_URL=your_supabase_url
+SUPABASE_ANON_KEY=your_supabase_key
+
 ```
 
 *Note: Place your `credentials.json` (from Google Cloud) in the `backend/` folder for Calendar access.*
@@ -119,9 +124,10 @@ npm run dev
 
 ## 5. 🌟 Key Innovations
 
-1. **Transparency:** Unlike black-box models, the user sees *exactly* why a decision was made by reading the debate transcript.
-2. **Conflict-Driven Reasoning:** By forcing agents to argue, we reduce hallucinations and ensure both safety (Zen) and progress (Drill) are considered.
-3. **True Agency:** The system doesn't just suggest; it **schedules**. It modifies the user's environment.
+1. **Contextual Memory (The Brain):** The system isn't amnesic. It queries **Supabase** to debug your past activity history. If you trained hard yesterday, the Zen Master adapts the argument to demand recovery today, while the Drill Sergeant pushes for consistency if you've been lazy.
+2. **Transparency:** Unlike black-box models, the user sees *exactly* why a decision was made by reading the debate transcript.
+3. **Conflict-Driven Reasoning:** By forcing agents to argue, we reduce hallucinations and ensure both safety (Zen) and progress (Drill) are considered.
+4. **True Agency:** The system doesn't just suggest; it **schedules**. It modifies the user's environment via Google Calendar.
 
 ---
 
