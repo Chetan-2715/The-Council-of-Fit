@@ -1,4 +1,3 @@
-
 # 🏛️ The Council of Fit
 ### *An Agentic Fitness Arbitration System*
 
@@ -126,7 +125,28 @@ npm run dev
 
 ---
 
-## 6. ⚠️ Ethical Disclaimer
+## 6. 💡 Design Philosophy (Why We Kept It Simple)
+
+We intentionally chose a **Minimalist Agentic Architecture** over a traditional complex web app. Here is why:
+
+### **Why no Multi-Page UI?**
+
+* **Focus on Agency, Not Navigation:** Traditional apps force users to click through tabs (Diet, Workout, Profile). An **Agentic System** should be able to ingest context and act in a single interaction.
+* **The "Council Chamber" Metaphor:** The UX is designed to simulate a meeting room. You don't leave the room to check your stats; the agents bring the data to *you*. A single-page view keeps the focus on the **Reasoning Process**.
+
+### **Why no Authentication?**
+
+* **Frictionless Demo:** Hackathon judges and users need to see value in **seconds**, not minutes. Forcing a login creates a barrier to entry.
+* **Privacy by Design:** For this proof-of-concept, all sensitive health data is processed in-session and not permanently stored on a centralized server, reducing data liability.
+
+### **Why are Agent Debate logs collapsible?**
+
+* **Explainability on Demand:** A key challenge in AI is "Black Box" decision-making. We provide full transparency (the logs), but we collapse them by default to reduce **Cognitive Load**.
+* **Trust Hierarchy:** The user first sees the **Action** (The Verdict). If they doubt the decision, they can expand the logs to audit the **Reasoning**. This balances usability with transparency.
+
+---
+
+## 7. ⚠️ Ethical Disclaimer
 
 *This system is a proof-of-concept for the Innov-AI-thon. It uses AI to provide fitness suggestions but is not a substitute for professional medical advice. The "Drill Sergeant" personality is designed to be aggressive for entertainment/motivation purposes only.*
 
