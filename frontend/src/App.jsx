@@ -1,313 +1,330 @@
-import { useState, useEffect, useRef } from 'react'
-import ReactMarkdown from 'react-markdown' // <--- 1. NEW IMPORT
-import './App.css'
-
-import Antigravity from './Antigravity'; // <--- NEW IMPORT
-import { GridScan } from './GridScan'; // <--- NEW IMPORT
+import { useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import { callAgent } from './api/gemini';
+import { AGENT_PROMPTS } from './agents/prompts';
+import './App.css';
 
 function App() {
-  /* 
-     1. FIX: Initialize numeric fields as strings to prevent leading '0' glitches 
-     during typing (e.g., "05"). We parse them back to numbers on submit.
-  */
+  const [step, setStep] = useState('input'); // input, processing, results
+  const [wizardStep, setWizardStep] = useState(0); // 0 to 4 for input sections
+
   const [formData, setFormData] = useState({
-    age: "25",
-    goal: "Muscle Building",
-    sleep_hours: "7",
-    stress_level: "Medium",
-    soreness: "Low",
-    available_time_minutes: "60"
+    feeling: '',
+    heartRate: '',
+    stress: 'Medium',
+    sleepHours: 7,
+    sleepMinutes: 0,
+    injuries: '',
+    equipment: [],
+    goal: 'Just want to stay active',
+    notes: ''
   });
 
-  const [status, setStatus] = useState('idle');
-  const [logs, setLogs] = useState([]);
-  const [decision, setDecision] = useState(null);
-  const [loadingText, setLoadingText] = useState("Summoning the Council...");
-  const [showDebate, setShowDebate] = useState(false);
-  const resultsRef = useRef(null);
+  const [councilOpinions, setCouncilOpinions] = useState({});
+  const [finalVerdict, setFinalVerdict] = useState(null);
 
-  useEffect(() => {
-    if (status === 'loading') {
-      const messages = [
-        "Drill Sergeant is yelling about intensity...",
-        "Zen Master is analyzing your sleep data...",
-        "Head Coach is checking your calendar...",
-        "Agents are arguing about your rest day..."
-      ];
-      let i = 0;
-      setLoadingText(messages[0]);
-      const interval = setInterval(() => {
-        i = (i + 1) % messages.length;
-        setLoadingText(messages[i]);
-      }, 2000);
-      return () => clearInterval(interval);
-    }
-  }, [status]);
+  const SECTIONS = [
+    "Feeling", "Health Signals", "Equipment", "Goal", "Notes"
+  ];
+  const TOTAL_STEPS = SECTIONS.length;
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-
-    // FIX: Just update the string value directly. 
-    // This allows "0", "", "05" (temporarily) without fighting the cursor.
-    // HTML5 input type="number" prevents non-numeric input anyway.
-
-    let sanitizedValue = value;
-
-    // Prevent negative numbers for specific fields
-    if (['age', 'sleep_hours', 'available_time_minutes'].includes(name)) {
-      if (Number(value) < 0) return; // Ignore negative inputs
-    }
-
-    setFormData(prev => ({
-      ...prev,
-      [name]: sanitizedValue
-    }));
+  const nextStep = () => {
+    if (!validateStep(wizardStep)) return alert("Please fill in the required fields to continue.");
+    if (wizardStep < TOTAL_STEPS - 1) setWizardStep(prev => prev + 1);
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setStatus('loading');
-    setLogs([]);
-    setDecision(null);
-    setShowDebate(false);
+  const prevStep = () => {
+    if (wizardStep > 0) setWizardStep(prev => prev - 1);
+  };
 
-    // FIX: Parse numbers here before sending
-    const payload = {
-      ...formData,
-      age: Number(formData.age),
-      sleep_hours: Number(formData.sleep_hours),
-      available_time_minutes: Number(formData.available_time_minutes)
-    };
+  const validateStep = (currentStep) => {
+    if (currentStep === 0 && !formData.feeling) return false;
+    return true;
+  };
+
+  const jumpToStep = (index) => {
+    // Only allow jumping if previous mandatory steps are met
+    if (index > wizardStep && !validateStep(wizardStep)) return alert("Complete the current step first.");
+    setWizardStep(index);
+  };
+
+  const EQUIPMENT_OPTIONS = [
+    "No equipment (bodyweight)", "Dumbbells", "Barbell",
+    "Resistance bands", "Bench", "Treadmill/Cardio", "Full Gym"
+  ];
+
+  const FEELING_OPTIONS = [
+    "Energetic", "Slightly tired", "Very tired",
+    "Muscle soreness", "Joint pain", "Stressed but motivated"
+  ];
+
+  const handleEquipmentChange = (item) => {
+    setFormData(prev => {
+      const exists = prev.equipment.includes(item);
+      if (exists) return { ...prev, equipment: prev.equipment.filter(e => e !== item) };
+      return { ...prev, equipment: [...prev.equipment, item] };
+    });
+  };
+
+  const runCouncil = async () => {
+    if (!formData.feeling) return alert("Please select how you are feeling!");
+
+    setStep('processing');
+    setCouncilOpinions({});
+    setFinalVerdict(null);
+
+    // 1. Initial Independent Analysis
+    const agents = Object.keys(AGENT_PROMPTS).filter(name => name !== 'Risk & Conflict Resolver');
+
+    const opinions = {};
+
+    // We run them in parallel. Rate limits are handled by Dual Clients logic in api/gemini.js
+    const promises = agents.map(async (agentName) => {
+      const response = await callAgent(agentName, AGENT_PROMPTS[agentName], formData);
+      return { name: agentName, response };
+    });
 
     try {
-      const response = await fetch('http://localhost:8000/api/consult_council', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+      const results = await Promise.all(promises);
+      results.forEach(r => opinions[r.name] = r.response);
+      setCouncilOpinions({ ...opinions });
 
-      if (!response.ok) throw new Error('API Failed');
+      // 2. Conflict Resolution
+      const resolverName = 'Risk & Conflict Resolver';
+      const resolution = await callAgent(
+        resolverName,
+        AGENT_PROMPTS[resolverName],
+        formData,
+        opinions
+      );
 
-      const data = await response.json();
-      setLogs(data.logs);
-      setDecision(data.decision);
-      setStatus('complete');
-      setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+      setFinalVerdict(resolution);
+      setStep('results');
 
-    } catch (err) {
-      console.error(err);
-      alert("Failed to consult the council. Check backend terminal.");
-      setStatus('idle');
+    } catch (e) {
+      console.error(e);
+      alert("Something went wrong invoking the Council.");
+      setStep('input');
     }
   };
 
   return (
-    <>
-      <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: -1, opacity: 0.8 }}>
-        <Antigravity
-          count={400}
-          magnetRadius={8}
-          ringRadius={8}
-          waveSpeed={1.5}
-          waveAmplitude={3}
-          particleSize={1.5}
-          lerpSpeed={0.1}
-          color={'#8b5cf6'}
-          autoAnimate={false}
-          particleVariance={15}
-          fieldStrength={15}
-        />
-      </div>
-      <div className="container">
-        <header style={{ marginBottom: '2rem', textAlign: 'center' }}>
-          <h1 style={{ fontSize: '2rem', margin: 0, fontWeight: '800', background: 'linear-gradient(to right, #60a5fa, #a78bfa)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-            THE COUNCIL OF FIT
-          </h1>
-          <p style={{ color: '#64748b', fontSize: '0.8rem', margin: '0.5rem 0' }}>Agentic Consensus Engine • CrewAI</p>
-        </header>
+    <div className="app-container">
+      <header>
+        <h1>🏛️ The Council of Fit</h1>
+        <p style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
+          Human + Machine Decision Support System
+        </p>
+      </header>
 
-        <div className="main-grid">
-          {/* INPUT FORM */}
-          <div className="glass-card">
-            <h2 style={{ fontSize: '1rem', color: '#fff', borderBottom: '1px solid #334155', paddingBottom: '0.5rem', marginBottom: '1rem' }}>📋 User Vitals</h2>
-            <form onSubmit={handleSubmit}>
-              <label>🎯 Primary Goal</label>
-              <select name="goal" value={formData.goal} onChange={handleChange}>
-                <option>Muscle Building</option>
-                <option>Fat Loss</option>
-                <option>Endurance</option>
-                <option>Recovery</option>
-              </select>
+      {step === 'input' && (
+        <div className="input-flow animate-fade-in">
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginTop: '1.5rem' }}>
-                <div>
-                  <label>🎂 Age</label>
-                  <input type="number" name="age" value={formData.age} onChange={handleChange} />
-                </div>
-                <div>
-                  <label>⏰ Time (min)</label>
-                  <input type="number" name="available_time_minutes" value={formData.available_time_minutes} onChange={handleChange} />
-                </div>
+          {/* Stepper Navigation */}
+          <div className="stepper-nav">
+            {SECTIONS.map((label, idx) => (
+              <div key={idx}
+                className={`step-indicator ${wizardStep === idx ? 'active' : ''} ${wizardStep > idx ? 'completed' : ''}`}
+                onClick={() => jumpToStep(idx)}
+              >
+                <div className="step-bubble">{idx + 1}</div>
+                <div className="step-label">{label}</div>
               </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem', marginTop: '1.5rem' }}>
-                <div>
-                  <label>🌙 Sleep</label>
-                  <input type="number" step="0.5" name="sleep_hours" value={formData.sleep_hours} onChange={handleChange} />
-                </div>
-                <div>
-                  <label>🤯 Stress</label>
-                  <select name="stress_level" value={formData.stress_level} onChange={handleChange}>
-                    <option>Low</option>
-                    <option>Medium</option>
-                    <option>High</option>
-                    <option>Extreme</option>
-                  </select>
-                </div>
-                <div>
-                  <label>🤕 Soreness</label>
-                  <select name="soreness" value={formData.soreness} onChange={handleChange}>
-                    <option>None</option>
-                    <option>Low</option>
-                    <option>Medium</option>
-                    <option>High</option>
-                  </select>
-                </div>
-              </div>
-
-              <button type="submit" disabled={status === 'loading'}>
-                {status === 'loading' ? '⚡ Summoning...' : '🔥 Start Session'}
-              </button>
-            </form>
+            ))}
           </div>
 
-          {/* RESULTS SECTION */}
-          <div ref={resultsRef} style={{ textAlign: 'left', minHeight: 'auto' }}>
-
-            {status === 'loading' && (
-              <div className="glass-card" style={{
-                textAlign: 'center',
-                padding: '0',
-                position: 'relative',
-                height: '300px',
-                overflow: 'hidden',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                border: '1px solid rgba(139, 92, 246, 0.3)'
-              }}>
-                <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 0 }}>
-                  <GridScan
-                    scanColor="#8b5cf6"
-                    linesColor="#2e1065"
-                    gridScale={0.2}
-                    scanDuration={2.5}
-                    scanGlow={1.5}
-                    enablePost={true}
-                  />
-                </div>
-
-                <div style={{ position: 'relative', zIndex: 1 }}>
-                  <p style={{
-                    color: '#e2e8f0',
-                    fontWeight: '600',
-                    fontSize: '1.2rem',
-                    textShadow: '0 2px 10px rgba(0,0,0,0.8)',
-                    background: 'rgba(0, 0, 0, 0.6)',
-                    padding: '0.75rem 1.5rem',
-                    borderRadius: '12px',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    backdropFilter: 'blur(4px)',
-                    animation: 'fadeIn 0.5s'
-                  }}>
-                    {loadingText}
-                  </p>
+          <div style={{ minHeight: '300px' }}>
+            {wizardStep === 0 && (
+              <div className="glass-card animate-slide-in">
+                <h2>How are you feeling? <span style={{ fontSize: '0.8em', color: 'var(--secondary)' }}>(Required)</span></h2>
+                <div className="checkbox-grid">
+                  {FEELING_OPTIONS.map(opt => (
+                    <div key={opt}
+                      className={`checkbox-item ${formData.feeling === opt ? 'selected' : ''}`}
+                      onClick={() => setFormData({ ...formData, feeling: opt })}
+                      style={{ background: formData.feeling === opt ? 'rgba(0, 242, 234, 0.2)' : '' }}
+                    >
+                      {opt}
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
 
-            {status === 'complete' && decision && (
-              <div style={{ animation: 'fadeIn 0.5s ease' }}>
-
-                {/* FINAL VERDICT CARD */}
-                <div className="glass-card verdict-card">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                    <h3 style={{ margin: 0, color: '#a78bfa', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Final Verdict</h3>
-                    <span style={{ fontSize: '0.75rem', color: '#6ee7b7' }}>Confidence: {Math.round(decision.confidence_score * 100)}%</span>
+            {wizardStep === 1 && (
+              <div className="glass-card animate-slide-in">
+                <h2>Health Signals <span style={{ fontSize: '0.6em', color: 'var(--text-muted)' }}>(Optional)</span></h2>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <div>
+                    <label>Resting HR (bpm)</label>
+                    <input type="number"
+                      min="0"
+                      value={formData.heartRate}
+                      onChange={e => {
+                        const val = parseInt(e.target.value);
+                        if (!isNaN(val) && val < 0) return;
+                        setFormData({ ...formData, heartRate: e.target.value })
+                      }}
+                      placeholder="e.g. 60"
+                    />
                   </div>
-
-                  {/* 2. USE REACT MARKDOWN HERE TOO */}
-                  <div className="final-plan-list">
-                    <ReactMarkdown>{decision.final_plan}</ReactMarkdown>
+                  <div>
+                    <label>Sleep Duration</label>
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                      <div className="counter-input">
+                        <button onClick={() => setFormData(prev => ({ ...prev, sleepHours: Math.max(0, prev.sleepHours - 1) }))}>-</button>
+                        <input type="number" value={formData.sleepHours} readOnly />
+                        <button onClick={() => setFormData(prev => ({ ...prev, sleepHours: Math.min(24, prev.sleepHours + 1) }))}>+</button>
+                      </div>
+                      <span>h</span>
+                      <div className="counter-input">
+                        <button onClick={() => setFormData(prev => ({ ...prev, sleepMinutes: Math.max(0, prev.sleepMinutes - 10) }))}>-</button>
+                        <input type="number" value={formData.sleepMinutes} readOnly />
+                        <button onClick={() => setFormData(prev => ({ ...prev, sleepMinutes: Math.min(59, prev.sleepMinutes + 10) }))}>+</button>
+                      </div>
+                      <span>m</span>
+                    </div>
                   </div>
-
-                  <div className="reasoning-text">"{decision.reasoning}"</div>
+                  <div>
+                    <label>Stress Level</label>
+                    <select value={formData.stress} onChange={e => setFormData({ ...formData, stress: e.target.value })}>
+                      <option>Low</option>
+                      <option>Medium</option>
+                      <option>High</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label>Injuries / Pain?</label>
+                    <input type="text"
+                      value={formData.injuries}
+                      onChange={e => setFormData({ ...formData, injuries: e.target.value })}
+                      placeholder="e.g. Right knee"
+                    />
+                  </div>
                 </div>
-
               </div>
+            )}
+
+            {wizardStep === 2 && (
+              <div className="glass-card animate-slide-in">
+                <h2>Available Equipment <span style={{ fontSize: '0.6em', color: 'var(--text-muted)' }}>(Optional)</span></h2>
+                <div className="checkbox-grid">
+                  {EQUIPMENT_OPTIONS.map(eq => (
+                    <div key={eq} className="checkbox-item" onClick={() => handleEquipmentChange(eq)}>
+                      <input type="checkbox" checked={formData.equipment.includes(eq)} readOnly />
+                      <span>{eq}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {wizardStep === 3 && (
+              <div className="glass-card animate-slide-in">
+                <h2>Your Goal <span style={{ fontSize: '0.6em', color: 'var(--secondary)' }}>(Required)</span></h2>
+                <select value={formData.goal} onChange={e => setFormData({ ...formData, goal: e.target.value })}>
+                  <option>Build strength</option>
+                  <option>Fat loss</option>
+                  <option>Light recovery workout</option>
+                  <option>Mobility / stretching</option>
+                  <option>Cardio</option>
+                  <option>Wait to stay active</option>
+                </select>
+              </div>
+            )}
+
+            {wizardStep === 4 && (
+              <div className="glass-card animate-slide-in">
+                <h2>Any Notes? <span style={{ fontSize: '0.6em', color: 'var(--text-muted)' }}>(Optional)</span></h2>
+                <textarea
+                  rows="3"
+                  placeholder="I feel good but my knee is slightly painful..."
+                  value={formData.notes}
+                  onChange={e => setFormData({ ...formData, notes: e.target.value })}
+                ></textarea>
+              </div>
+            )}
+          </div>
+
+          <div className="wizard-actions" style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
+            <button onClick={prevStep} disabled={wizardStep === 0} style={{ background: 'var(--bg-card)', border: '1px solid var(--glass-border)' }}>
+              Back
+            </button>
+
+            {wizardStep < TOTAL_STEPS - 1 ? (
+              <button className="primary-btn" style={{ flex: 1 }} onClick={nextStep}>
+                Next
+              </button>
+            ) : (
+              <button className="primary-btn" style={{ flex: 1 }} onClick={runCouncil}>
+                Summon the Council
+              </button>
             )}
           </div>
         </div>
+      )}
 
-        {/* FULL WIDTH BOTTOM SECTION FOR DEBATE LOGS */}
-        {status === 'complete' && decision && (
-          <div style={{ marginTop: '2rem', animation: 'fadeIn 0.5s ease' }}>
-
-            {/* TOGGLE BUTTON */}
-            <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
-              <button
-                onClick={() => setShowDebate(!showDebate)}
-                className="debate-toggle"
-              >
-                <svg viewBox="0 0 24 24" className="arr-2" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M16.1716 10.9999L10.8076 5.63589L12.2218 4.22168L20 11.9999L12.2218 19.778L10.8076 18.3638L16.1716 12.9999H4V10.9999H16.1716Z" />
-                </svg>
-                <span className="text">{showDebate ? "📜 Hide Debate" : "📜 View Debate"}</span>
-                <span className="circle" />
-                <svg viewBox="0 0 24 24" className="arr-1" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M16.1716 10.9999L10.8076 5.63589L12.2218 4.22168L20 11.9999L12.2218 19.778L10.8076 18.3638L16.1716 12.9999H4V10.9999H16.1716Z" />
-                </svg>
-              </button>
-            </div>
-
-            {/* DEBATE LOGS */}
-            {showDebate && (
-              <div className="chat-container">
-                {logs.map((log, index) => {
-                  let type = 'coach';
-                  let avatar = '⚖️'; // Default for Head Coach
-
-                  if (log.agent.includes('Drill')) {
-                    type = 'drill';
-                    avatar = '🪖';
-                  }
-                  if (log.agent.includes('Zen')) {
-                    type = 'zen';
-                    avatar = '🧘';
-                  }
-
-                  return (
-                    <div key={index} className={`glass-card chat-bubble ${type}`}>
-                      <div className="chat-header" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', flexDirection: type === 'zen' ? 'row-reverse' : 'row' }}>
-                        <span style={{ fontSize: '1.5rem', lineHeight: 1 }}>{avatar}</span>
-                        <strong className="agent-name" style={{ margin: 0 }}>
-                          {log.agent}
-                        </strong>
-                      </div>
-                      {/* 3. THIS FIXES THE **BOLD** TEXT */}
-                      <div className="markdown-content">
-                        <ReactMarkdown>{log.content}</ReactMarkdown>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
+      {step === 'processing' && (
+        <div className="processing-state">
+          <div className="glass-card" style={{ textAlign: 'center' }}>
+            <h2>The Council is Deliberating...</h2>
+            <div className="loading-pulse">Analyzing Biometrics...</div>
+            <br />
+            <div className="loading-pulse" style={{ animationDelay: '0.5s' }}>Consulting Safety Protocols...</div>
+            <br />
+            <div className="loading-pulse" style={{ animationDelay: '1s' }}>Optimizing for Goals...</div>
           </div>
-        )}
-      </div>
-    </>
-  )
+        </div>
+      )}
+
+      {step === 'results' && (
+        <div className="results-view animate-fade-in">
+
+          <div className="glass-card">
+            <h3>📝 User Summary</h3>
+            <ul style={{ listStyle: 'none', padding: 0, color: 'var(--text-muted)' }}>
+              <li><strong>Feeling:</strong> {formData.feeling}</li>
+              {formData.heartRate && <li><strong>HR:</strong> {formData.heartRate} bpm</li>}
+              <li><strong>Sleep:</strong> {formData.sleepHours}h {formData.sleepMinutes}m</li>
+              <li><strong>Stress:</strong> {formData.stress}</li>
+              <li><strong>Goal:</strong> {formData.goal}</li>
+              <li><strong>Equipment:</strong> {formData.equipment.length > 0 ? formData.equipment.join(", ") : "None"}</li>
+            </ul>
+          </div>
+
+          <div className="glass-card conflict-resolver">
+            <h2>⚖️ The Verdict (Conflict Resolution)</h2>
+            <div className="markdown-content">
+              <ReactMarkdown>{finalVerdict}</ReactMarkdown>
+            </div>
+          </div>
+
+          <h3>Council Opinions</h3>
+          <div className="agent-grid">
+            {Object.entries(councilOpinions).map(([name, opinion]) => (
+              <div key={name} className="agent-card">
+                <div className="agent-name">{name}</div>
+                <div className="agent-role">{AGENT_PROMPTS[name].match(/Focus: (.*)/)?.[1] || "Advisor"}</div>
+                <div className="markdown-content">
+                  <ReactMarkdown>{opinion}</ReactMarkdown>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="glass-card" style={{ marginTop: '2rem', textAlign: 'center', border: '1px solid var(--primary)' }}>
+            <h2>Your Choice</h2>
+            <p>The Council has spoken. These are suggestions, not commands. Choose what feels right for you today.</p>
+            <button onClick={() => setStep('input')} style={{ marginTop: '1rem' }}>
+              Start New Session
+            </button>
+          </div>
+
+        </div>
+      )}
+
+    </div>
+  );
 }
 
-export default App
+export default App;
