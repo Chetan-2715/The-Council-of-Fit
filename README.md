@@ -63,4 +63,4 @@ This project is a modern **React + Vite** application.
 
 ---
 
-**Built with ❤️ by Antigravity**
+**Built with ❤️ by Chetan**
