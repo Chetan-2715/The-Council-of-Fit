@@ -2,6 +2,8 @@ import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { callAgent } from './api/gemini';
 import { AGENT_PROMPTS } from './agents/prompts';
+import Loader from './Loader';
+import LightRays from './LightRays';
 import './App.css';
 
 function App() {
@@ -22,6 +24,8 @@ function App() {
 
   const [councilOpinions, setCouncilOpinions] = useState({});
   const [finalVerdict, setFinalVerdict] = useState(null);
+  const [disagreementsFound, setDisagreementsFound] = useState(false);
+  const [dataMissing, setDataMissing] = useState(false);
 
   const SECTIONS = [
     "Feeling", "Health Signals", "Equipment", "Goal", "Notes"
@@ -72,15 +76,31 @@ function App() {
     setStep('processing');
     setCouncilOpinions({});
     setFinalVerdict(null);
+    setDisagreementsFound(false);
+    setDataMissing(false);
 
     // 1. Initial Independent Analysis
     const agents = Object.keys(AGENT_PROMPTS).filter(name => name !== 'Risk & Conflict Resolver');
 
     const opinions = {};
 
+    // structured payload for agents (Cleaner Context)
+    const userContext = {
+      feelingToday: formData.feeling,
+      healthSignals: {
+        heartRate: formData.heartRate,
+        sleep: `${formData.sleepHours}h ${formData.sleepMinutes}m`,
+        stress: formData.stress,
+        injuries: formData.injuries
+      },
+      equipmentAvailable: formData.equipment,
+      goalToday: formData.goal,
+      extraNotes: formData.notes
+    };
+
     // We run them in parallel. Rate limits are handled by Dual Clients logic in api/gemini.js
     const promises = agents.map(async (agentName) => {
-      const response = await callAgent(agentName, AGENT_PROMPTS[agentName], formData);
+      const response = await callAgent(agentName, AGENT_PROMPTS[agentName], userContext);
       return { name: agentName, response };
     });
 
@@ -91,14 +111,23 @@ function App() {
 
       // 2. Conflict Resolution
       const resolverName = 'Risk & Conflict Resolver';
-      const resolution = await callAgent(
+      const resolutionJSON = await callAgent(
         resolverName,
         AGENT_PROMPTS[resolverName],
-        formData,
+        userContext,
         opinions
       );
 
-      setFinalVerdict(resolution);
+      // Parse JSON from Resolver
+      try {
+        const parsed = JSON.parse(resolutionJSON.replace(/```json/g, '').replace(/```/g, '').trim());
+        setFinalVerdict(parsed.summary);
+        setDisagreementsFound(parsed.hasDisagreements);
+        setDataMissing(parsed.missingData);
+      } catch (err) {
+        console.error("Failed to parse JSON resolution:", err);
+        setFinalVerdict(resolutionJSON); // Fallback to raw text if parsing fails
+      }
       setStep('results');
 
     } catch (e) {
@@ -110,8 +139,18 @@ function App() {
 
   return (
     <div className="app-container">
+      <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: -1 }}>
+        <LightRays
+          raysColor="#00f2ea"
+          raysOrigin="top-center"
+          raysSpeed={0.4}
+          lightSpread={1.2}
+          rayLength={1.5}
+          fadeDistance={1.0}
+        />
+      </div>
       <header>
-        <h1>🏛️ The Council of Fit</h1>
+        <h1><span className="emoji-fix">🏛️</span> The Council of Fit</h1>
         <p style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
           Human + Machine Decision Support System
         </p>
@@ -133,10 +172,10 @@ function App() {
             ))}
           </div>
 
-          <div style={{ minHeight: '300px' }}>
+          <div>
             {wizardStep === 0 && (
               <div className="glass-card animate-slide-in">
-                <h2>How are you feeling? <span style={{ fontSize: '0.8em', color: 'var(--secondary)' }}>(Required)</span></h2>
+                <h2>How are you feeling? <span style={{ fontSize: '0.8em', color: 'var(--secondary)' }}></span></h2>
                 <div className="checkbox-grid">
                   {FEELING_OPTIONS.map(opt => (
                     <div key={opt}
@@ -153,7 +192,7 @@ function App() {
 
             {wizardStep === 1 && (
               <div className="glass-card animate-slide-in">
-                <h2>Health Signals <span style={{ fontSize: '0.6em', color: 'var(--text-muted)' }}>(Optional)</span></h2>
+                <h2>Health Signals <span style={{ fontSize: '0.6em', color: 'var(--text-muted)' }}></span></h2>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                   <div>
                     <label>Resting HR (bpm)</label>
@@ -207,7 +246,7 @@ function App() {
 
             {wizardStep === 2 && (
               <div className="glass-card animate-slide-in">
-                <h2>Available Equipment <span style={{ fontSize: '0.6em', color: 'var(--text-muted)' }}>(Optional)</span></h2>
+                <h2>Available Equipment <span style={{ fontSize: '0.6em', color: 'var(--text-muted)' }}></span></h2>
                 <div className="checkbox-grid">
                   {EQUIPMENT_OPTIONS.map(eq => (
                     <div key={eq} className="checkbox-item" onClick={() => handleEquipmentChange(eq)}>
@@ -221,7 +260,7 @@ function App() {
 
             {wizardStep === 3 && (
               <div className="glass-card animate-slide-in">
-                <h2>Your Goal <span style={{ fontSize: '0.6em', color: 'var(--secondary)' }}>(Required)</span></h2>
+                <h2>Your Goal <span style={{ fontSize: '0.6em', color: 'var(--secondary)' }}></span></h2>
                 <select value={formData.goal} onChange={e => setFormData({ ...formData, goal: e.target.value })}>
                   <option>Build strength</option>
                   <option>Fat loss</option>
@@ -235,7 +274,7 @@ function App() {
 
             {wizardStep === 4 && (
               <div className="glass-card animate-slide-in">
-                <h2>Any Notes? <span style={{ fontSize: '0.6em', color: 'var(--text-muted)' }}>(Optional)</span></h2>
+                <h2>Any Notes? <span style={{ fontSize: '0.6em', color: 'var(--text-muted)' }}></span></h2>
                 <textarea
                   rows="3"
                   placeholder="I feel good but my knee is slightly painful..."
@@ -246,17 +285,21 @@ function App() {
             )}
           </div>
 
-          <div className="wizard-actions" style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
-            <button onClick={prevStep} disabled={wizardStep === 0} style={{ background: 'var(--bg-card)', border: '1px solid var(--glass-border)' }}>
+          <div className="wizard-actions">
+            <button
+              className="secondary-btn"
+              onClick={prevStep}
+              style={{ visibility: wizardStep === 0 ? 'hidden' : 'visible' }}
+            >
               Back
             </button>
 
             {wizardStep < TOTAL_STEPS - 1 ? (
-              <button className="primary-btn" style={{ flex: 1 }} onClick={nextStep}>
+              <button className="primary-btn" onClick={nextStep}>
                 Next
               </button>
             ) : (
-              <button className="primary-btn" style={{ flex: 1 }} onClick={runCouncil}>
+              <button className="primary-btn" onClick={runCouncil}>
                 Summon the Council
               </button>
             )}
@@ -265,14 +308,33 @@ function App() {
       )}
 
       {step === 'processing' && (
-        <div className="processing-state">
-          <div className="glass-card" style={{ textAlign: 'center' }}>
-            <h2>The Council is Deliberating...</h2>
-            <div className="loading-pulse">Analyzing Biometrics...</div>
-            <br />
-            <div className="loading-pulse" style={{ animationDelay: '0.5s' }}>Consulting Safety Protocols...</div>
-            <br />
-            <div className="loading-pulse" style={{ animationDelay: '1s' }}>Optimizing for Goals...</div>
+        <div className="processing-state" style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          minHeight: '60vh'
+        }}>
+          <div className="glass-card" style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '3rem',
+            padding: '3rem',
+            flexDirection: 'row',
+            maxWidth: '800px',
+            width: '100%'
+          }}>
+            {/* Left Side: New Graphic Loader */}
+            <div style={{ flex: '0 0 auto' }}>
+              <Loader />
+            </div>
+
+            {/* Right Side: Text Updates */}
+            <div style={{ flex: 1, borderLeft: '1px solid var(--glass-border)', paddingLeft: '3rem' }}>
+              <h2 style={{ marginBottom: '2rem', color: 'var(--primary)' }}>The Council is Deliberating...</h2>
+              <div className="loading-pulse" style={{ fontSize: '1.2rem', marginBottom: '1rem' }}>Analyzing Biometrics...</div>
+              <div className="loading-pulse" style={{ animationDelay: '0.5s', fontSize: '1.2rem', marginBottom: '1rem' }}>Consulting Safety Protocols...</div>
+              <div className="loading-pulse" style={{ animationDelay: '1s', fontSize: '1.2rem' }}>Optimizing for Goals...</div>
+            </div>
           </div>
         </div>
       )}
@@ -293,7 +355,19 @@ function App() {
           </div>
 
           <div className="glass-card conflict-resolver">
-            <h2>⚖️ The Verdict (Conflict Resolution)</h2>
+            <h2 style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+              ⚖️ Council Discussion Summary
+              {disagreementsFound && (
+                <span style={{ fontSize: '0.8rem', background: '#ff0055', padding: '0.3rem 0.6rem', borderRadius: '4px' }}>
+                  ⚠ AGENT DISAGREEMENTS FOUND
+                </span>
+              )}
+              {dataMissing && (
+                <span style={{ fontSize: '0.8rem', background: '#eab308', color: 'black', padding: '0.3rem 0.6rem', borderRadius: '4px' }}>
+                  ⚠ CONFIDENCE REDUCED (MISSING DATA)
+                </span>
+              )}
+            </h2>
             <div className="markdown-content">
               <ReactMarkdown>{finalVerdict}</ReactMarkdown>
             </div>

@@ -13,17 +13,30 @@ body {
   margin: 0;
   padding: 0;
   background-color: var(--bg-dark);
-  background: radial-gradient(circle at 50% 0%, #1a1f2e 0%, var(--bg-dark) 100%);
+  background-color: #000000;
+  /* Solid black for contrast */
+  /* Remove gradient to let LightRays shine */
   color: var(--text-main);
   font-family: var(--font-family);
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
+  display: flex;
+  /* Center vertically */
+  align-items: center;
+  /* Center vertically */
+  justify-content: center;
+  /* Center horizontally */
 }
 
 #root {
-  max-width: 1200px;
+  max-width: 1400px;
+  width: 95%;
   margin: 0 auto;
   padding: 2rem;
+  position: relative;
+  /* Ensure z-index context */
+  z-index: 10;
+  /* Above the background */
 }
 
 h1,
@@ -35,13 +48,25 @@ h3 {
 }
 
 h1 {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 800;
   font-size: 3rem;
   background: linear-gradient(to right, var(--text-main), var(--text-muted));
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 4px 4px rgba(0, 0, 0, 0.8));
+  /* Improve contrast */
   text-align: center;
   margin-bottom: 2rem;
+  letter-spacing: -0.03em;
+}
+
+.emoji-fix {
+  -webkit-text-fill-color: initial !important;
+  /* Force emoji color */
+  text-shadow: none;
+  background: none;
 }
 
 button {
@@ -68,27 +93,29 @@ button:disabled {
 }
 
 .glass-card {
-  background: var(--bg-card);
-  backdrop-filter: blur(12px);
+  background: rgba(10, 12, 20, 0.85);
+  /* Much darker for legibility */
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--glass-border);
   border-radius: 16px;
   padding: 2rem;
-  margin-bottom: 1.5rem;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
 }
 
 input,
 select,
 textarea {
   width: 100%;
-  padding: 0.8rem;
-  background: rgba(0, 0, 0, 0.3);
+  padding: 0.8rem 1rem;
+  background: rgba(0, 0, 0, 0.6);
+  /* Darker input background */
   border: 1px solid var(--glass-border);
   border-radius: 8px;
   color: var(--text-main);
   font-family: inherit;
   font-size: 1rem;
-  margin-top: 0.5rem;
+  transition: all 0.2s;
   box-sizing: border-box;
 }
 
@@ -110,7 +137,8 @@ label {
 /* Custom Checkbox Grid */
 .checkbox-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  /* Decrease min-width to fit more rows */
   gap: 1rem;
 }
 
@@ -123,8 +151,9 @@ label {
   cursor: pointer;
   padding: 0.75rem;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid transparent;
+  background: rgba(0, 0, 0, 0.4);
+  /* Dark background for items */
+  border: 1px solid var(--glass-border);
   transition: all 0.2s;
 }
 
@@ -151,7 +180,11 @@ label {
 .agent-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 1.5rem;
+  grid-auto-rows: 1fr;
+  /* Ensure all rows match height */
+  gap: 2rem;
+  /* Increased gap to prevent proximity overlaps */
+  align-items: stretch;
 }
 
 /* Counter Input for Sleep */
@@ -298,7 +331,13 @@ label {
   position: relative;
   gap: 0.5rem;
   overflow-x: auto;
-  padding-bottom: 0.5rem;
+  padding: 1rem;
+  /* Added padding */
+  background: rgba(0, 0, 0, 0.6);
+  /* Dark background for legibility */
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  backdrop-filter: blur(10px);
 }
 
 .step-indicator {
@@ -352,9 +391,26 @@ label {
   white-space: nowrap;
 }
 
-/* Hide legacy progress bar if needed, or keep for mobile */
+/* Wizard Styles */
+.input-flow {
+  max-width: 650px;
+  /* Constrain width for boxy look */
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Ensure the card maintains a "square-ish" ratio approx */
+.input-flow .glass-card {
+  /* Removed fixed min-height to shrink wrap content */
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  /* Center content vertically inside the box */
+}
+
 .wizard-progress {
-  display: none;
+  margin-bottom: 2rem;
 }
 
 .animate-slide-in {
@@ -376,4 +432,38 @@ label {
 .wizard-actions button:disabled {
   opacity: 0.3;
   cursor: default;
+}
+
+.wizard-actions {
+  display: flex;
+  justify-content: space-between;
+  /* Back (Left), Next (Right) */
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1.5rem;
+  /* Ensure spacing from the card */
+  width: 100%;
+}
+
+.secondary-btn {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--glass-border);
+  color: var(--text-muted);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  padding: 0.8rem 1.5rem;
+  /* Match primary button padding */
+}
+
+.secondary-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-main);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.primary-btn {
+  /* Ensure primary button (Next) matches secondary in size logic if needed */
+  margin-left: auto;
+  /* Double ensure right alignment if flex gap fails */
 }
