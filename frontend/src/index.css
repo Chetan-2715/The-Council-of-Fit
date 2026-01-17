@@ -179,12 +179,23 @@ label {
 /* Agent Card Grid */
 .agent-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  grid-template-columns: repeat(3, 1fr);
+  /* Force 3 columns */
   grid-auto-rows: 1fr;
-  /* Ensure all rows match height */
-  gap: 2rem;
-  /* Increased gap to prevent proximity overlaps */
+  gap: 1.5rem;
   align-items: stretch;
+}
+
+@media (max-width: 1024px) {
+  .agent-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .agent-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Counter Input for Sleep */
@@ -261,6 +272,28 @@ label {
   color: rgba(255, 255, 255, 0.85);
   font-size: 0.95rem;
   line-height: 1.5;
+}
+
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3 {
+  text-align: left !important;
+  background: none !important;
+  -webkit-text-fill-color: var(--text-main) !important;
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.markdown-content h1 {
+  font-size: 1.4rem;
+  color: var(--primary);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 0.5rem;
+}
+
+.markdown-content h2 {
+  font-size: 1.2rem;
+  color: var(--text-main);
 }
 
 .markdown-content p {

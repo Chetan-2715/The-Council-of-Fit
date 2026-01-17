@@ -1,7 +1,14 @@
 import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { callAgent } from './api/gemini';
-import { AGENT_PROMPTS } from './agents/prompts';
+import { callPanel, callResolver } from './api/gemini';
+// import { AGENT_PROMPTS } from './agents/prompts'; // No longer needed directly here
+import { AGENT_PROMPTS } from './agents/prompts'; // Keeping for UI card labels if needed, or we can mock them. Actually let's keep it but we might need to adjust the UI mapping.
+// Wait, the UI uses AGENT_PROMPTS keys for mapping. Let's fix that.
+// The new architecture returns a mapped object in runCouncil, so we iterate over councilOpinions keys directly.
+// The UI uses AGENT_PROMPTS[name] to get the role description.
+// We should update the UI to not rely on AGENT_PROMPTS for roles if the keys change, but I kept the keys same in formattedOpinions.
+// However, I should make sure AGENT_PROMPTS is still imported or define a static map for titles.
+
 import Loader from './Loader';
 import LightRays from './LightRays';
 import './App.css';
@@ -26,6 +33,18 @@ function App() {
   const [finalVerdict, setFinalVerdict] = useState(null);
   const [disagreementsFound, setDisagreementsFound] = useState(false);
   const [dataMissing, setDataMissing] = useState(false);
+  const [showDetails, setShowDetails] = useState(false); // Toggle for advisor cards
+  const [showSummary, setShowSummary] = useState(false); // Toggle for main discussion
+
+  // Helper to extract specific sections from the Markdown verdict
+  const getSafeOptions = (text) => {
+    if (!text) return null;
+    // Look for ## Safe Options until the next ## header or end of string
+    const match = text.match(/## Safe Options([\s\S]*?)(?=##|$)/i);
+    return match ? match[1].trim() : null;
+  };
+
+  const safeOptionsContent = getSafeOptions(finalVerdict);
 
   const SECTIONS = [
     "Feeling", "Health Signals", "Equipment", "Goal", "Notes"
@@ -76,15 +95,12 @@ function App() {
     setStep('processing');
     setCouncilOpinions({});
     setFinalVerdict(null);
-    setDisagreementsFound(false);
+    setDisagreementsFound(false); // Reset flags
     setDataMissing(false);
+    setShowDetails(false); // Reset details toggle
+    setShowSummary(false); // Reset summary toggle
 
-    // 1. Initial Independent Analysis
-    const agents = Object.keys(AGENT_PROMPTS).filter(name => name !== 'Risk & Conflict Resolver');
-
-    const opinions = {};
-
-    // structured payload for agents (Cleaner Context)
+    // Context Construction
     const userContext = {
       feelingToday: formData.feeling,
       healthSignals: {
@@ -98,41 +114,44 @@ function App() {
       extraNotes: formData.notes
     };
 
-    // We run them in parallel. Rate limits are handled by Dual Clients logic in api/gemini.js
-    const promises = agents.map(async (agentName) => {
-      const response = await callAgent(agentName, AGENT_PROMPTS[agentName], userContext);
-      return { name: agentName, response };
-    });
-
     try {
-      const results = await Promise.all(promises);
-      results.forEach(r => opinions[r.name] = r.response);
-      setCouncilOpinions({ ...opinions });
+      // 1. STEP ONE: THE PANEL (Single Call)
+      console.log("Calling Panel...");
+      const panelResults = await callPanel(userContext);
 
-      // 2. Conflict Resolution
-      const resolverName = 'Risk & Conflict Resolver';
-      const resolutionJSON = await callAgent(
-        resolverName,
-        AGENT_PROMPTS[resolverName],
-        userContext,
-        opinions
-      );
+      if (panelResults.error) throw new Error(panelResults.error);
 
-      // Parse JSON from Resolver
-      try {
-        const parsed = JSON.parse(resolutionJSON.replace(/```json/g, '').replace(/```/g, '').trim());
-        setFinalVerdict(parsed.summary);
-        setDisagreementsFound(parsed.hasDisagreements);
-        setDataMissing(parsed.missingData);
-      } catch (err) {
-        console.error("Failed to parse JSON resolution:", err);
-        setFinalVerdict(resolutionJSON); // Fallback to raw text if parsing fails
+      // Map structured JSON to display format for UI
+      const formattedOpinions = {
+        "Body Safety Advisor": panelResults.bodySafetyAdvisor?.summary + "\n\n**Reasoning:** " + panelResults.bodySafetyAdvisor?.reasoning,
+        "Energy & Recovery Advisor": panelResults.energyRecoveryAdvisor?.summary + "\n\n**Reasoning:** " + panelResults.energyRecoveryAdvisor?.reasoning,
+        "Health & Stress Advisor": panelResults.healthStressAdvisor?.summary + "\n\n**Reasoning:** " + panelResults.healthStressAdvisor?.reasoning,
+        "Equipment & Feasibility Advisor": "Suggested: " + panelResults.equipmentAdvisor?.availableEquipment?.join(", "),
+        "Goal Optimization Advisor": panelResults.goalAdvisor?.goalAlignment + "\n\n" + panelResults.goalAdvisor?.suggestedFocus,
+        "Consistency & Motivation Advisor": panelResults.motivationAdvisor?.motivationState + "\n\n" + panelResults.motivationAdvisor?.sustainabilityAdvice
+      };
+
+      setCouncilOpinions(formattedOpinions);
+
+      // 2. STEP TWO: THE RESOLVER (Single Call)
+      console.log("Calling Resolver...");
+      const resolutionMarkdown = await callResolver(userContext, panelResults);
+
+      setFinalVerdict(resolutionMarkdown);
+
+      // Simple keyword detection for flags (since Resolver now returns Markdown, not JSON)
+      if (resolutionMarkdown.toLowerCase().includes("disagree")) {
+        setDisagreementsFound(true);
       }
+      if (resolutionMarkdown.toLowerCase().includes("missing")) {
+        setDataMissing(true);
+      }
+
       setStep('results');
 
     } catch (e) {
       console.error(e);
-      alert("Something went wrong invoking the Council.");
+      alert("Something went wrong invoking the Council. Please try again.");
       setStep('input');
     }
   };
@@ -354,37 +373,79 @@ function App() {
             </ul>
           </div>
 
-          <div className="glass-card conflict-resolver">
-            <h2 style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-              ⚖️ Council Discussion Summary
-              {disagreementsFound && (
-                <span style={{ fontSize: '0.8rem', background: '#ff0055', padding: '0.3rem 0.6rem', borderRadius: '4px' }}>
-                  ⚠ AGENT DISAGREEMENTS FOUND
-                </span>
-              )}
-              {dataMissing && (
-                <span style={{ fontSize: '0.8rem', background: '#eab308', color: 'black', padding: '0.3rem 0.6rem', borderRadius: '4px' }}>
-                  ⚠ CONFIDENCE REDUCED (MISSING DATA)
-                </span>
-              )}
-            </h2>
+          <div className="glass-card" style={{ border: '1px solid var(--primary)', background: 'rgba(0, 242, 234, 0.05)' }}>
+            <h2 style={{ color: 'var(--primary)', marginBottom: '0.5rem' }}>✅ Recommended Action Plan</h2>
             <div className="markdown-content">
-              <ReactMarkdown>{finalVerdict}</ReactMarkdown>
+              {safeOptionsContent ? (
+                <ReactMarkdown>{safeOptionsContent}</ReactMarkdown>
+              ) : (
+                <p>See full discussion below.</p>
+              )}
             </div>
           </div>
 
-          <h3>Council Opinions</h3>
-          <div className="agent-grid">
-            {Object.entries(councilOpinions).map(([name, opinion]) => (
-              <div key={name} className="agent-card">
-                <div className="agent-name">{name}</div>
-                <div className="agent-role">{AGENT_PROMPTS[name].match(/Focus: (.*)/)?.[1] || "Advisor"}</div>
-                <div className="markdown-content">
-                  <ReactMarkdown>{opinion}</ReactMarkdown>
-                </div>
-              </div>
-            ))}
+          <div style={{ textAlign: 'center', margin: '1rem 0' }}>
+            <button
+              className="secondary-btn"
+              onClick={() => setShowSummary(prev => !prev)}
+              style={{ padding: '0.5rem 1rem', fontSize: '0.9rem' }}
+            >
+              {showSummary ? "Hide Council Discussion Summary ▲" : "Show Council Discussion Summary ▼"}
+            </button>
           </div>
+
+          {showSummary && (
+            <div className="glass-card conflict-resolver animate-fade-in">
+              <h2 style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                ⚖️ Council Discussion Summary
+                {(disagreementsFound || dataMissing) && (
+                  <div style={{ display: 'flex', gap: '0.5rem', fontSize: '0.8rem' }}>
+                    {disagreementsFound && (
+                      <span style={{ background: '#ff0055', padding: '0.3rem 0.6rem', borderRadius: '4px' }}>
+                        ⚠ DISAGREEMENTS FOUND
+                      </span>
+                    )}
+                    {dataMissing && (
+                      <span style={{ background: '#eab308', color: 'black', padding: '0.3rem 0.6rem', borderRadius: '4px' }}>
+                        ⚠ DATA MISSING
+                      </span>
+                    )}
+                  </div>
+                )}
+              </h2>
+
+              <div className="markdown-content">
+                <ReactMarkdown>{finalVerdict}</ReactMarkdown>
+              </div>
+            </div>
+          )}
+
+          <div style={{ textAlign: 'center', margin: '2rem 0' }}>
+            <button
+              className="secondary-btn"
+              onClick={() => setShowDetails(prev => !prev)}
+              style={{ padding: '0.5rem 1rem', fontSize: '0.9rem' }}
+            >
+              {showDetails ? "Hide Individual Opinions ▲" : "Show Individual Opinions ▼"}
+            </button>
+          </div>
+
+          {showDetails && (
+            <div className="animate-fade-in">
+              <h3>Council Opinions</h3>
+              <div className="agent-grid">
+                {Object.entries(councilOpinions).map(([name, opinion]) => (
+                  <div key={name} className="agent-card">
+                    <div className="agent-name">{name}</div>
+                    <div className="agent-role">{AGENT_PROMPTS && AGENT_PROMPTS[name] ? (AGENT_PROMPTS[name].match(/Focus: (.*)/)?.[1] || "Advisor") : "Advisor"}</div>
+                    <div className="markdown-content">
+                      <ReactMarkdown>{opinion}</ReactMarkdown>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="glass-card" style={{ marginTop: '2rem', textAlign: 'center', border: '1px solid var(--primary)' }}>
             <h2>Your Choice</h2>

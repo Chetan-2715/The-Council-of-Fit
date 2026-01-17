@@ -14,69 +14,57 @@ const geminiPrimaryClient = genAI_1.getGenerativeModel({ model: "gemini-3-flash-
 const geminiSecondaryClient = genAI_2.getGenerativeModel({ model: "gemini-3-flash-preview" });
 
 // 3. Mapping Agents to Clients
-const PRIMARY_AGENTS = [
-    "Body Safety Advisor",
-    "Health & Stress Advisor",
-    "Risk & Conflict Resolver"
-];
+const PRIMARY_PANEL_MODEL = geminiPrimaryClient;
+const SECONDARY_RESOLVER_MODEL = geminiSecondaryClient; // Explicit Separation
 
 /**
- * Calls a specific agent.
- * @param {string} agentName - Name of the agent (e.g., "Body Safety Advisor")
- * @param {string} roleDescription - The specific system prompt/persona for the agent
- * @param {object} userInputs - The structured user input
- * @param {object} otherAgentOpinions - (Optional) For the Conflict Resolver, summaries of other agents.
- * @returns {Promise<string>} - The agent's response
+ * 1. CALL ONE: THE PANEL
+ * Runs all 6 advisors in a single API call to ensure strict alignment and speed.
  */
-export async function callAgent(agentName, roleDescription, userInputs, otherAgentOpinions = null) {
-    if (!API_KEY_1 && !API_KEY_2) {
-        return "Error: API Keys are missing. Please check .env file.";
-    }
-
-    // Select the correct client
-    const client = PRIMARY_AGENTS.includes(agentName)
-        ? geminiPrimaryClient
-        : geminiSecondaryClient;
-
-    // Build the Prompt
-    let prompt = `ROLE: ${roleDescription}\n`;
-
-    if (otherAgentOpinions) {
-        // Special Path for Conflict Resolver (JSON MODE)
-        prompt += `
-TASK: Synthesize the inputs and opinions below into a JSON judgment.
-CRITICAL: 
-- Output ONLY valid JSON. No markdown code blocks like \`\`\`json.
-- JSON Structure:
-  {
-    "hasDisagreements": true/false,
-    "missingData": true/false,
-    "summary": "Markdown string here. Keep it concise (max 80 words). Explain conflicts or trade-offs. End with a specific 'Safe Recommendation'."
-  }
-- Analyze the user context for missing key data (sleep, heart rate, stress).
-`;
-        prompt += `\nUSER INPUT:\n${JSON.stringify(userInputs, null, 2)}\n`;
-        prompt += `\nOTHER AGENT OPINIONS:\n${JSON.stringify(otherAgentOpinions, null, 2)}\n`;
-    } else {
-        // Standard Path for Advisory Agents
-        prompt += `
-TASK: Analyze the USER INPUT and provide a recommendation.
-CRITICAL GUIDELINES:
-- **EXTREMELY CONCISE**: Max 50 words total.
-- **FORMAT**: Use bullet points or short paragraphs.
-- **NO FLUFF**: Get straight to the point.
-- **TONE**: Simple, local gym language. No technical jargon.
-- **EXPLAIN**: Briefly say WHY.
-`;
-        prompt += `\nUSER INPUT:\n${JSON.stringify(userInputs, null, 2)}\n`;
-    }
+export async function callPanel(userInputs) {
+    if (!API_KEY_1) return { error: "Missing API Key" };
 
     try {
-        const result = await client.generateContent(prompt);
+        // Import dynamically or pass as arg to avoid circular deps if needed, 
+        // but assuming prompts.js is clean.
+        const { PANEL_PROMPT } = await import('../agents/prompts');
+
+        const finalPrompt = PANEL_PROMPT.replace('{{USER_INPUT}}', JSON.stringify(userInputs, null, 2));
+
+        const result = await PRIMARY_PANEL_MODEL.generateContent(finalPrompt);
+        const response = await result.response;
+        const text = response.text();
+
+        // Clean markdown if present
+        const cleanJson = text.replace(/```json/g, '').replace(/```/g, '').trim();
+        return JSON.parse(cleanJson);
+
+    } catch (e) {
+        console.error("PANEL CALL FAILED:", e);
+        return { error: "The Panel is currently unavailable." };
+    }
+}
+
+/**
+ * 2. CALL TWO: THE RESOLVER
+ * Synthesizes the Panel's JSON output into the final advice.
+ */
+export async function callResolver(userInputs, panelOutput) {
+    if (!API_KEY_2) return "System Error: Secondary API Key missing.";
+
+    try {
+        const { RESOLVER_PROMPT } = await import('../agents/prompts');
+
+        let finalPrompt = RESOLVER_PROMPT
+            .replace('{{USER_INPUT}}', JSON.stringify(userInputs, null, 2))
+            .replace('{{PANEL_OUTPUT}}', JSON.stringify(panelOutput, null, 2));
+
+        const result = await SECONDARY_RESOLVER_MODEL.generateContent(finalPrompt);
         const response = await result.response;
         return response.text();
-    } catch (error) {
-        console.error(`Error in ${agentName}:`, error);
-        return `(System Error: ${agentName} is currently unavailable)`;
+
+    } catch (e) {
+        console.error("RESOLVER CALL FAILED:", e);
+        return "Error: The High Council could not reach a verdict. Please rely on the individual advisor notes above.";
     }
 }
